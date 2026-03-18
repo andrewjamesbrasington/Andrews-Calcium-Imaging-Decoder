@@ -1,22 +1,34 @@
 # ACID — Andrew's Calcium Imaging Decoder
 
-ACID is a desktop application for processing and analysing calcium imaging data. It is designed for researchers working with fluorescence recordings from multiple cells across multiple experimental conditions.
+ACID is a desktop application for processing and analysing calcium imaging data. It is designed for researchers working with fluorescence recordings from multiple cells across multiple experimental conditions. Written with assistance from Claude AI.
 
 ## Features
 
 - Load one or more CSV or LOG data files
 - Automatically detect and skip metadata rows, with manual correction available
 - Correct for reversed time ordering in files where data runs in descending order, assuming time is in the first column
-- Select and configure which columns represent cells and which represents the background reference
-- The background column must be in the same position across all files
+<<<<<<< HEAD
+- Select and configure which columns represent cells and which represents the background reference, which is applied to all files
 - Background-subtract fluorescence values row by row across all active cell columns
 - Align data start rows across files, with per-file confirmation
 - Group files into experimental conditions for averaged traces
 - Interactive graph with draggable window bounds, per-series value readout, and discrete time snapping
-- Window statistics including min, max, and standard deviation per group
-- Welch's two-tailed t-test comparing group minimums or maximums against a user-selected control
+- Calculate statistics including min, max, and standard deviation per group
+- Welch's two-tailed t-test (a=0.05) comparing group minimums or maximums against a user-selected control
 - Export statistics and t-test results to CSV
-- Save publication-ready graph images
+- Save graph images to PNG
+=======
+- Select and configure which columns represent cells and which represents the background reference
+- The background column is assumed to be in the same position across all files
+- Background-subtract fluorescence values row by row across all active cell columns
+- Align data start rows across files, with per-file confirmation
+- Group files into experimental conditions for averaged traces
+- Interactive graph with draggable window bounds and per-series value readout
+- Calculate file and group statistics including min, max, and standard deviation
+- Welch's two-tailed t-test ( a=0.05) comparing group minimums or maximums against a user-selected control 
+- Export statistics and t-test results to CSV
+- Save graph images
+>>>>>>> b1b47432e7876c9cba9f4933755acbab31670273
 
 ## Installation
 
