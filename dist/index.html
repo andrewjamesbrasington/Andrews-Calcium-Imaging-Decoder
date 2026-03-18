@@ -154,6 +154,10 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
 .fname-input:focus{border-color:var(--info-text)}
 .fname-input.invalid{border-color:var(--danger-text)!important;background:var(--danger-bg)!important;animation:fname-shake .25s ease}
 @keyframes fname-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}60%{transform:translateX(5px)}}
+/* PNG / SVG format toggle */
+.fmt-toggle{display:flex;border:0.5px solid var(--border2);border-radius:var(--r);overflow:hidden;flex-shrink:0}
+.fmt-btn{padding:5px 11px;font-size:12px;font-weight:500;background:transparent;border:none;cursor:pointer;color:var(--text3)}
+.fmt-btn.active{background:var(--info-bg);color:var(--info-text)}
 
 /* T-Test */
 .ttest-box{margin-top:1.5rem;border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden}
@@ -165,6 +169,10 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
 .ttest-metric{display:flex;gap:6px;margin-bottom:12px}
 .metric-btn{padding:4px 12px;font-size:12px;font-weight:500;border:0.5px solid var(--border2);border-radius:10px;background:transparent;cursor:pointer;color:var(--text3)}
 .metric-btn.active{background:var(--info-bg);color:var(--info-text);border-color:var(--info-border)}
+.anova-comp-list{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.anova-comp-item{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;user-select:none;padding:3px 0}
+.anova-comp-item input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:var(--info-text);flex-shrink:0}
+.anova-m-note{font-size:11px;color:var(--text2);padding:6px 10px;background:var(--bg2);border-radius:var(--r);margin-bottom:12px;border:0.5px solid var(--border)}
 </style>
 </head>
 <body>
@@ -264,26 +272,49 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
     <div class="frow">
       <button class="btn btn-p" onclick="go(5)">Compute statistics →</button>
       <button class="btn" onclick="go(3)">← Back</button>
-      <div class="save-group"><input class="fname-input" id="fnVisible" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn" onclick="saveGraphNamed('visible','fnVisible')" title="Save all currently visible lines">↓ Save visible</button></div>
-      <div class="save-group"><input class="fname-input" id="fnGroups" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn" onclick="saveGraphNamed('groups','fnGroups')" title="Save all group lines (visible and hidden)">↓ Save all groups</button></div>
-      <div class="save-group"><input class="fname-input" id="fnFiles" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn" onclick="saveGraphNamed('files','fnFiles')" title="Save all individual file lines (visible and hidden)">↓ Save all files</button></div>
+      <div class="fmt-toggle" title="Choose save format"><button class="fmt-btn active" id="fmtPng" onclick="setGraphFmt('png')">PNG</button><button class="fmt-btn" id="fmtSvg" onclick="setGraphFmt('svg')">SVG</button></div>
+      <div class="save-group"><input class="fname-input" id="fnVisible" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn" onclick="saveGraphNamed('visible','fnVisible')" title="Save all currently visible lines">↓ Save visible lines</button></div>
+      <div class="save-group"><input class="fname-input" id="fnGroups" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn" onclick="saveGraphNamed('groups','fnGroups')" title="Save all group lines (visible and hidden)">↓ Save all group lines</button></div>
+      <div class="save-group"><input class="fname-input" id="fnFiles" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn" onclick="saveGraphNamed('files','fnFiles')" title="Save all individual file lines (visible and hidden)">↓ Save all individual file lines</button></div>
     </div>
   </div>
 
   <!-- 5: Stats -->
   <div class="panel" id="p5">
-    <div id="ttestSection" style="display:none">
-      <div class="ttest-box">
-        <div class="ttest-hdr">Two-sample t-tests — Welch's, two-tailed, alpha = 0.05</div>
-        <div class="ttest-body">
-          <div class="ttest-selrow">
-            <div><label>Control group</label><select id="ttCtrl" onchange="runTTest()"></select></div>
+  <div id="ttestSection" style="display:none">
+      <!-- T-test box: shown when exactly 2 eligible groups are visible -->
+      <div id="ttestBox">
+        <div class="ttest-box">
+          <div class="ttest-hdr">Two-sample t-test — Welch's, two-tailed, α = 0.05</div>
+          <div class="ttest-body">
+            <div class="ttest-selrow">
+              <div><label>Control group</label><select id="ttCtrl" onchange="runTTest()"></select></div>
+            </div>
+            <div class="ttest-metric">
+              <button class="metric-btn active" id="mbMin" onclick="setTMetric('min')">Compare minimums</button>
+              <button class="metric-btn" id="mbMax" onclick="setTMetric('max')">Compare maximums</button>
+              <div class="save-group" style="margin-left:auto"><input class="fname-input" id="fnTTest" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn btn-sm" onclick="dlTestCSVNamed('fnTTest')">↓ Save test CSV</button></div>
+            </div>
+            <div id="ttestResult"></div>
           </div>
-          <div class="ttest-metric">
-            <button class="metric-btn active" id="mbMin" onclick="setTMetric('min')">Compare minimums</button>
-            <button class="metric-btn" id="mbMax" onclick="setTMetric('max')">Compare maximums</button>
+        </div>
+      </div>
+      <!-- ANOVA box: shown when 3+ eligible groups are visible -->
+      <div id="anovaBox" style="display:none">
+        <div class="ttest-box">
+          <div class="ttest-hdr">One-way ANOVA (Welch's) with Bonferroni post-hoc — α = 0.05</div>
+          <div class="ttest-body">
+            <div class="ttest-metric">
+              <button class="metric-btn active" id="abMin" onclick="setTMetric('min')">Compare minimums</button>
+              <button class="metric-btn" id="abMax" onclick="setTMetric('max')">Compare maximums</button>
+              <div class="save-group" style="margin-left:auto"><input class="fname-input" id="fnAnova" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn btn-sm" onclick="dlTestCSVNamed('fnAnova')">↓ Save test CSV</button></div>
+            </div>
+            <div class="ttest-selrow">
+              <div><label>Control group</label><select id="anovaCtrl" onchange="buildAnovaComparisons()"></select></div>
+            </div>
+            <div id="anovaComparisons"></div>
+            <div id="anovaResult"></div>
           </div>
-          <div id="ttestResult"></div>
         </div>
       </div>
     </div>
@@ -320,6 +351,7 @@ var boundL=null, boundR=null, // left/right time bounds of the averaging window 
     chartMeta=null;           // last-drawn chart's coordinate mapping, used for hit-testing drags
 var _seriesCache={}; // fid -> {series, stamp} — memoized background-subtracted series per file
 var _cacheStamp=0;   // bumped whenever data changes; stale cache entries are ignored
+var graphFmt='png';  // current graph save format: 'png' or 'svg'
 
 // Color palettes — file lines use FCOLS (lighter), group average lines use GCOLS (darker)
 var FCOLS=['#378ADD','#1D9E75','#D85A30','#D4537E','#7F77DD','#BA7517','#E24B4A','#639922','#0891B2','#CA8A04'];
@@ -1336,7 +1368,7 @@ function renderStats(){
 
   document.getElementById('statContent').innerHTML=h;
   window._statsRes=res;
-  renderTTestSection();
+  renderTestSection();
 }
 
 // Serialises the current stats results (and t-test results if present) to a CSV blob
@@ -1391,28 +1423,97 @@ function dlCSV(name){
     });
   });
 
-  // T-test results
+  // T-test and ANOVA results are saved separately via the "Save test CSV" button
+  // inside each test panel — they are intentionally excluded from this file.
+
+  var b=new Blob([lines.join('\n')],{type:'text/csv'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(name||'acid_stats')+'.csv';a.click();
+  showToast('✓ '+(name||'acid_stats')+'.csv exported successfully');
+}
+
+// Serialises only the currently active statistical test (t-test or ANOVA — whichever is
+// visible) to a CSV blob and triggers a download. Kept separate from dlCSV() so the user
+// can save the test results and the descriptive stats independently with their own names.
+function dlTestCSV(name){
+  var lines=[
+    'ACID',
+    "# Andrew's Calcium Imaging Decoder",
+    '# Window: '+boundL+' s to '+boundR+' s',
+    '# Generated: '+new Date().toISOString(),
+    ''
+  ];
+
   if(window._ttestRes){
+    // ── Two-sample Welch's t-test ──────────────────────────────────────────
     var tr=window._ttestRes;
-    lines.push('');
-    lines.push('=== Two-Sample t-Tests (Welch\'s two-tailed alpha = 0.05) ===');
+    lines.push('=== Two-Sample t-Test (Welch\'s, two-tailed, α = 0.05) ===');
     lines.push('# Metric compared: '+tr.metric+'imum');
     lines.push('# Control group: '+tr.ctrlName);
     lines.push('');
     lines.push('control_group,n_files,mean_'+tr.metric+',sample_sd_'+tr.metric);
     lines.push(['"'+tr.ctrlName+'"',tr.ctrlN,tr.ctrlMean.toFixed(6),tr.ctrlSD.toFixed(6)].join(','));
     lines.push('');
-    lines.push('experimental_group,n_files,mean_'+tr.metric+',sample_sd_'+tr.metric+',t_statistic,degrees_of_freedom,p_value_two_tailed,significant_at_0.05');
+    lines.push('experimental_group,n_files,mean_'+tr.metric+',sample_sd_'+tr.metric
+      +',t_statistic,degrees_of_freedom,p_value_two_tailed,significant_at_0.05');
     tr.results.forEach(function(row){
       var r=row.r;
       lines.push(['"'+row.expName+'"',r.nB,r.meanB.toFixed(6),r.sdB.toFixed(6),
                   r.t.toFixed(4),r.df.toFixed(2),r.p.toFixed(6),row.sig?'YES':'NO'].join(','));
     });
+
+  } else if(window._anovaRes){
+    // ── Welch's one-way ANOVA with Bonferroni post-hoc ────────────────────
+    var ar=window._anovaRes;
+    lines.push('=== Welch\'s One-Way ANOVA with Bonferroni Post-Hoc ===');
+    lines.push('# Test: Welch\'s one-way ANOVA (heteroscedasticity-robust; does not assume equal variances)');
+    lines.push('# Metric compared: '+ar.metric+'imum');
+    lines.push('# Control group: '+ar.ctrlName);
+    lines.push('# Groups in omnibus test (k): '+ar.k);
+    lines.push('# Total observations (N): '+ar.N);
+    lines.push('# Post-hoc comparisons selected (m): '+ar.m);
+    lines.push('# Bonferroni-adjusted alpha: 0.05 / '+ar.m+' = '+ar.alphaBonf.toFixed(6));
+    lines.push('');
+    lines.push('Omnibus Test (Welch\'s one-way ANOVA)');
+    // omega-squared: unbiased effect size estimator computed from SS values (not back-calculated
+    // from the F-statistic) — remains accurate under heteroscedasticity (Maxwell et al., 2018)
+    lines.push('F_Welch,df1,df2,p_value,omega_squared,omega_effect_size,result_at_alpha_0.05');
+    lines.push([ar.anova.F.toFixed(4),ar.anova.df1,ar.anova.df2.toFixed(2),
+      ar.anova.p.toFixed(6),ar.anova.omegaSq.toFixed(4),omegaLabel(ar.anova.omegaSq),
+      ar.anova.p<0.05?'SIGNIFICANT':'NOT SIGNIFICANT'].join(','));
+    lines.push('');
+    // Post-hoc: pairwise Welch t-tests with Bonferroni correction (p_adj = min(p_raw × m, 1))
+    // Cohen's d uses the pooled SD estimator (Cohen, 1988)
+    lines.push('Post-Hoc Comparisons (Welch\'s t, Bonferroni correction m='+ar.m+')');
+    lines.push('comparison,ctrl_n,exp_n,ctrl_mean_'+ar.metric+',exp_mean_'+ar.metric
+      +',t_statistic,degrees_of_freedom,p_raw,p_bonferroni,significant_at_adj_alpha,cohens_d,cohens_d_interpretation');
+    ar.results.forEach(function(r){
+      lines.push([
+        '"'+ar.ctrlName+' vs '+r.expName+'"',
+        r.ctrlN,r.expN,
+        r.ctrlMean.toFixed(6),r.expMean.toFixed(6),
+        r.t.toFixed(4),r.df.toFixed(2),
+        r.pRaw.toFixed(6),r.pBonf.toFixed(6),
+        r.sig?'YES':'NO',
+        r.d!==null?r.d.toFixed(4):'',
+        r.d!==null?dLabel(r.d):''
+      ].join(','));
+    });
+
+  } else {
+    showToast('No test results to save yet.');
+    return;
   }
 
   var b=new Blob([lines.join('\n')],{type:'text/csv'});
-  var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(name||'acid_stats')+'.csv';a.click();
-  showToast('✓ '+(name||'acid_stats')+'.csv exported successfully');
+  var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(name||'acid_test')+'.csv';a.click();
+  showToast('✓ '+(name||'acid_test')+'.csv exported successfully');
+}
+
+// Validates the filename input then calls dlTestCSV()
+function dlTestCSVNamed(inputId){
+  var name=_requireName(inputId);
+  if(!name)return;
+  dlTestCSV(name);
 }
 
 
@@ -1518,12 +1619,17 @@ function welchT(a,b){
          sdA:Math.sqrt(vA),sdB:Math.sqrt(vB),nA:na,nB:nb};
 }
 
-// Switches the t-test metric between 'min' and 'max', updates the active button, and reruns the test
+// Switches the metric between 'min' and 'max', keeps both sets of metric buttons
+// (t-test and ANOVA) in sync, then re-runs whichever test is currently visible.
 function setTMetric(m){
   ttMetric=m;
   document.getElementById('mbMin').classList.toggle('active',m==='min');
   document.getElementById('mbMax').classList.toggle('active',m==='max');
-  runTTest();
+  document.getElementById('abMin').classList.toggle('active',m==='min');
+  document.getElementById('abMax').classList.toggle('active',m==='max');
+  var anovaBox=document.getElementById('anovaBox');
+  if(anovaBox&&anovaBox.style.display!=='none'){runAnova();}
+  else{runTTest();}
 }
 
 // Returns one min or max value per member file of a group, filtered to points within the
@@ -1546,24 +1652,59 @@ function getGroupVals(gid,metric){
   }).filter(function(v){return v!==null});
 }
 
-// Shows or hides the t-test section based on whether at least 2 eligible visible groups
-// (each with ≥2 files that have data in the window) exist; rebuilds the control-group dropdown
-function renderTTestSection(){
-  var sec=document.getElementById('ttestSection');
-  // Only groups that are visible on the graph AND have ≥2 files with data in window
-  var eligible=groups.filter(function(g){
+// Returns the groups that are both visible on the graph and have ≥2 files with data in window.
+// This is the shared eligibility check used by both the t-test and ANOVA routing.
+function getEligibleGroups(){
+  return groups.filter(function(g){
     if(!lineVis['group-'+g.id])return false;
     return getGroupVals(g.id,ttMetric).length>=2;
   });
-  if(eligible.length<2){sec.style.display='none';window._ttestRes=null;return;}
+}
+
+// Single entry point called by renderStats(). Decides which statistical test UI to show:
+//   < 2 eligible groups  → hide the entire test section
+//   exactly 2            → show Welch's t-test box, hide ANOVA box
+//   3+                   → show Welch's one-way ANOVA box, hide t-test box
+// This means the two boxes are mutually exclusive and never both visible at once.
+function renderTestSection(){
+  var sec=document.getElementById('ttestSection');
+  var eligible=getEligibleGroups();
+
+  if(eligible.length<2){
+    sec.style.display='none';
+    window._ttestRes=null;window._anovaRes=null;
+    return;
+  }
   sec.style.display='block';
-  var ctrl=document.getElementById('ttCtrl');
-  var prevCtrl=ctrl.value;
-  ctrl.innerHTML=eligible.map(function(g){
-    return'<option value="'+g.id+'">'+esc(g.name)+'</option>';
-  }).join('');
-  if(prevCtrl&&eligible.find(function(g){return String(g.id)===prevCtrl}))ctrl.value=prevCtrl;
-  runTTest();
+
+  var ttBox=document.getElementById('ttestBox');
+  var anovaBox=document.getElementById('anovaBox');
+
+  if(eligible.length===2){
+    // Two groups — use the existing Welch's t-test
+    ttBox.style.display='block';
+    anovaBox.style.display='none';
+    window._anovaRes=null;
+    var ctrl=document.getElementById('ttCtrl');
+    var prev=ctrl.value;
+    ctrl.innerHTML=eligible.map(function(g){
+      return'<option value="'+g.id+'">'+esc(g.name)+'</option>';
+    }).join('');
+    if(prev&&eligible.find(function(g){return String(g.id)===prev}))ctrl.value=prev;
+    runTTest();
+  } else {
+    // Three or more groups — use Welch's one-way ANOVA
+    ttBox.style.display='none';
+    anovaBox.style.display='block';
+    window._ttestRes=null;
+    var ctrl=document.getElementById('anovaCtrl');
+    var prev=ctrl.value;
+    ctrl.innerHTML=eligible.map(function(g){
+      return'<option value="'+g.id+'">'+esc(g.name)+'</option>';
+    }).join('');
+    if(prev&&eligible.find(function(g){return String(g.id)===prev}))ctrl.value=prev;
+    buildAnovaComparisons();
+  }
 }
 
 // Runs Welch's t-test comparing every eligible experimental group against the selected control.
@@ -1665,15 +1806,289 @@ function _requireName(inputId){
   }
   return val;
 }
+// Switches the save format between 'png' and 'svg' and updates the toggle button state
+function setGraphFmt(fmt){
+  graphFmt=fmt;
+  document.getElementById('fmtPng').classList.toggle('active',fmt==='png');
+  document.getElementById('fmtSvg').classList.toggle('active',fmt==='svg');
+}
 function saveGraphNamed(mode,inputId){
   var name=_requireName(inputId);
   if(!name)return;
-  saveGraph(mode,name);
+  if(graphFmt==='svg')saveGraphSVG(mode,name);
+  else saveGraph(mode,name);
 }
 function dlCSVNamed(inputId){
   var name=_requireName(inputId);
   if(!name)return;
   dlCSV(name);
+}
+
+/* ================================================================
+   WELCH'S ONE-WAY ANOVA + BONFERRONI POST-HOC
+   ================================================================ */
+
+// Welch's one-way ANOVA (Welch, 1951). Used instead of standard one-way ANOVA because
+// it does not assume equal variances across groups — consistent with the Welch's t-test
+// already used for pairwise comparisons elsewhere in this software.
+//
+// For k groups, each with sample mean x̄ᵢ, sample variance sᵢ², and size nᵢ:
+//
+//   Precision weight:        wᵢ = nᵢ / sᵢ²
+//   Sum of weights:          W  = Σ wᵢ
+//   Weighted grand mean:     x̄** = Σ(wᵢ · x̄ᵢ) / W
+//
+//   Welch F-statistic:
+//     F* =       Σ wᵢ(x̄ᵢ − x̄**)² / (k − 1)
+//          ────────────────────────────────────────────────────────
+//          1 + [2(k−2)/(k²−1)] · Λ      where Λ = Σ[(1−wᵢ/W)²/(nᵢ−1)]
+//
+//   Numerator df:    df₁ = k − 1
+//   Denominator df:  df₂ = (k²−1) / (3Λ)     (Satterthwaite approximation)
+//
+//   p-value: upper tail of F(df₁, df₂), computed via the regularised incomplete
+//   beta function already available as betai():
+//     CDF of F at F* = I_x(df₁/2, df₂/2),  x = df₁·F* / (df₁·F* + df₂)
+//     p = 1 − CDF
+//
+// Returns { F, df1, df2, p, omegaSq } or null if computation is impossible.
+function welchOneWayAnova(groupVals){
+  var k=groupVals.length;
+  if(k<2)return null;
+
+  // Per-group: n, mean, sample variance
+  var stats=groupVals.map(function(vals){
+    var n=vals.length;
+    if(n<2)return null;
+    var mean=vals.reduce(function(a,b){return a+b},0)/n;
+    var v=vals.reduce(function(s,x){return s+(x-mean)*(x-mean)},0)/(n-1);
+    return{n:n,mean:mean,v:v};
+  });
+  if(stats.some(function(s){return!s||s.v===0}))return null;
+
+  // Precision weights wᵢ = nᵢ / sᵢ²
+  var w=stats.map(function(s){return s.n/s.v});
+  var W=w.reduce(function(a,b){return a+b},0);
+
+  // Weighted grand mean
+  var grandMean=stats.reduce(function(s,si,i){return s+w[i]*si.mean},0)/W;
+
+  // Numerator: Σ wᵢ(x̄ᵢ − x̄**)² / (k−1)
+  var num=stats.reduce(function(s,si,i){
+    var d=si.mean-grandMean;return s+w[i]*d*d;
+  },0)/(k-1);
+
+  // Λ = Σ[(1−wᵢ/W)²/(nᵢ−1)] — used in both denominator correction and df₂
+  var Lambda=stats.reduce(function(s,si,i){
+    var r=1-w[i]/W;return s+(r*r)/(si.n-1);
+  },0);
+
+  var denom=1+(2*(k-2)/((k*k-1)))*Lambda;
+  var F=num/denom;
+  var df1=k-1;
+  var df2=(k*k-1)/(3*Lambda);
+
+  // p-value via upper tail of F(df1, df2) using betai()
+  var x_b=df1*F/(df1*F+df2);
+  var p=1-betai(df1/2,df2/2,x_b);
+
+  // Omega-squared (ω²) — unbiased omnibus effect size estimator (Maxwell et al., 2018).
+  // Computed from raw SS values rather than from the Welch F-statistic, because SS-based
+  // ω² remains an accurate variance-explained estimate regardless of heteroscedasticity.
+  //
+  // Unweighted grand mean (Σ nᵢ x̄ᵢ / N) — distinct from the precision-weighted grand
+  // mean used above for the F-statistic.
+  //
+  //   N            = Σ nᵢ
+  //   SS_between   = Σᵢ nᵢ(x̄ᵢ − x̄_grand)²
+  //   SS_within    = Σᵢ (nᵢ−1)sᵢ²
+  //   SS_total     = SS_between + SS_within
+  //   MS_within    = SS_within / (N − k)
+  //
+  //   ω² = (SS_between − (k−1)·MS_within) / (SS_total + MS_within)
+  //
+  // Negative values are possible with small samples; clamped to 0.
+  var N=stats.reduce(function(s,si){return s+si.n},0);
+  var ugm=stats.reduce(function(s,si){return s+si.n*si.mean},0)/N;
+  var ssBetween=stats.reduce(function(s,si){var d=si.mean-ugm;return s+si.n*d*d;},0);
+  var ssWithin=stats.reduce(function(s,si){return s+(si.n-1)*si.v;},0);
+  var ssTotal=ssBetween+ssWithin;
+  var msWithin=ssWithin/(N-k);
+  var omegaSq=Math.max(0,(ssBetween-(k-1)*msWithin)/(ssTotal+msWithin));
+
+  return{F:F,df1:df1,df2:df2,p:p,omegaSq:omegaSq};
+}
+
+// Cohen's d for two independent samples — used as the pairwise effect size in post-hoc comparisons.
+// Uses the pooled standard deviation (Cohen, 1988), which assumes roughly comparable group sizes;
+// appropriate here because Welch's t already handles unequal variances in the significance test.
+//
+//   s_pooled = sqrt( [(nA−1)sA² + (nB−1)sB²] / (nA + nB − 2) )
+//   d        = (x̄A − x̄B) / s_pooled
+//
+// Sign convention: positive d means the control mean exceeds the experimental mean.
+// Returns null if either group has < 2 observations or the pooled SD is zero.
+function cohenD(valsA,valsB){
+  var nA=valsA.length,nB=valsB.length;
+  if(nA<2||nB<2)return null;
+  var mA=valsA.reduce(function(a,b){return a+b},0)/nA;
+  var mB=valsB.reduce(function(a,b){return a+b},0)/nB;
+  var vA=valsA.reduce(function(s,v){return s+(v-mA)*(v-mA)},0)/(nA-1);
+  var vB=valsB.reduce(function(s,v){return s+(v-mB)*(v-mB)},0)/(nB-1);
+  var sp=Math.sqrt(((nA-1)*vA+(nB-1)*vB)/(nA+nB-2));
+  if(sp===0)return null;
+  return(mA-mB)/sp;
+}
+
+// Verbal label for |Cohen's d| using conventional thresholds (Cohen, 1988):
+//   |d| < 0.2  → negligible    |d| < 0.5  → small
+//   |d| < 0.8  → medium        |d| ≥ 0.8  → large
+function dLabel(d){
+  var a=Math.abs(d);
+  if(a<0.2)return'negligible';
+  if(a<0.5)return'small';
+  if(a<0.8)return'medium';
+  return'large';
+}
+
+// Verbal label for ω² using conventional thresholds (Cohen, 1988 / Richardson, 2011):
+//   ω² < 0.01  → negligible    ω² < 0.06  → small
+//   ω² < 0.14  → medium        ω² ≥ 0.14  → large
+function omegaLabel(o){
+  if(o<0.01)return'negligible';
+  if(o<0.06)return'small';
+  if(o<0.14)return'medium';
+  return'large';
+}
+
+// Builds the comparison checkboxes for the ANOVA post-hoc section, then runs the ANOVA.
+// Called when the control-group dropdown changes or the ANOVA box is first rendered.
+function buildAnovaComparisons(){
+  var ctrlId=document.getElementById('anovaCtrl').value;
+  var eligible=getEligibleGroups();
+  var ctrlGroup=eligible.find(function(g){return String(g.id)===String(ctrlId)});
+  var nonCtrl=eligible.filter(function(g){return String(g.id)!==String(ctrlId)});
+
+  var ctrlName=ctrlGroup?esc(ctrlGroup.name):'control';
+  var html='<p style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:6px">Comparisons to include in post-hoc:</p>';
+  html+='<div class="anova-comp-list">';
+  nonCtrl.forEach(function(g){
+    html+='<label class="anova-comp-item">'
+      +'<input type="checkbox" class="anova-comp-chk" value="'+g.id+'" checked onchange="runAnova()">'
+      +ctrlName+' vs <strong>'+esc(g.name)+'</strong>'
+      +'</label>';
+  });
+  html+='</div>';
+  document.getElementById('anovaComparisons').innerHTML=html;
+  runAnova();
+}
+
+// Runs Welch's one-way ANOVA across all selected groups (control + chosen experimental),
+// then runs pairwise Welch's t-tests with Bonferroni correction (m = number of selected
+// comparisons) and reports Cohen's d for each pair.
+function runAnova(){
+  var res=document.getElementById('anovaResult');
+  var eligible=getEligibleGroups();
+  var ctrlId=document.getElementById('anovaCtrl').value;
+  var ctrlGroup=eligible.find(function(g){return String(g.id)===String(ctrlId)});
+  if(!ctrlGroup){res.innerHTML='';window._anovaRes=null;return;}
+
+  // Collect checked comparison IDs
+  var chks=document.querySelectorAll('.anova-comp-chk:checked');
+  var selIds=Array.from(chks).map(function(c){return c.value});
+  if(!selIds.length){
+    res.innerHTML='<p style="font-size:12px;color:var(--text3);padding:6px 0">Select at least one comparison above to see results.</p>';
+    window._anovaRes=null;return;
+  }
+
+  var selExpGroups=eligible.filter(function(g){return selIds.indexOf(String(g.id))>=0});
+  // Omnibus test includes control + all selected experimental groups
+  var omnibusGroups=[ctrlGroup].concat(selExpGroups);
+  var omnibusVals=omnibusGroups.map(function(g){return getGroupVals(g.id,ttMetric);});
+  var ctrlVals=getGroupVals(ctrlGroup.id,ttMetric);
+
+  var metricLabel=ttMetric==='min'?'minimum':'maximum';
+  var m=selIds.length; // Bonferroni m = number of selected comparisons only
+  var alphaBonf=0.05/m;
+
+  // Welch's one-way ANOVA
+  var anova=welchOneWayAnova(omnibusVals);
+  if(!anova){
+    res.innerHTML='<p style="font-size:12px;color:var(--warn-text);padding:6px 0">Cannot compute ANOVA — check that all groups have ≥ 2 files with data in the current window and non-zero variance.</p>';
+    window._anovaRes=null;return;
+  }
+
+  // Omnibus result table
+  var anovaColor=anova.p<0.05?'var(--success-text)':'var(--danger-text)';
+  var anovaLabel=anova.p<0.05?'✓ Significant':'✗ Not significant';
+  var h='<p style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px">Omnibus test</p>';
+  h+='<div class="stat-wrap" style="margin-bottom:10px"><table class="st"><thead><tr>'
+    +'<th>F (Welch)</th><th>df₁</th><th>df₂</th><th>p-value</th>'
+    +'<th>ω²</th><th>Effect size</th><th>Result at α = 0.05</th>'
+    +'</tr></thead><tbody><tr>'
+    +'<td class="mn">'+anova.F.toFixed(4)+'</td>'
+    +'<td class="mn">'+anova.df1+'</td>'
+    +'<td class="mn">'+anova.df2.toFixed(2)+'</td>'
+    +'<td class="mn">'+anova.p.toFixed(6)+'</td>'
+    +'<td class="mn">'+anova.omegaSq.toFixed(4)+'</td>'
+    +'<td style="color:var(--text2)">'+omegaLabel(anova.omegaSq)+'</td>'
+    +'<td><span style="font-weight:600;color:'+anovaColor+'">'+anovaLabel+'</span></td>'
+    +'</tr></tbody></table></div>';
+
+  // Bonferroni note
+  h+='<div class="anova-m-note">Bonferroni post-hoc: <strong>m = '+m+'</strong> comparison'+(m>1?'s':'')+' selected &rarr; adjusted &alpha; = 0.05 / '+m+' = <strong>'+alphaBonf.toFixed(m>1?4:3)+'</strong></div>';
+
+  // Post-hoc table header
+  h+='<p style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px">Post-hoc comparisons (Welch\'s t, Bonferroni-corrected)</p>';
+  h+='<div class="stat-wrap"><table class="st"><thead><tr>'
+    +'<th>Comparison (ctrl vs exp)</th><th>ctrl n</th><th>exp n</th>'
+    +'<th>Mean '+metricLabel+' (ctrl)</th><th>Mean '+metricLabel+' (exp)</th>'
+    +'<th>t</th><th>df</th><th>p (raw)</th><th>p (Bonferroni)</th>'
+    +'<th>Cohen\'s d</th><th>Result at adj. α</th>'
+    +'</tr></thead><tbody>';
+
+  var postHocResults=[];
+  selExpGroups.forEach(function(expGroup){
+    var expVals=getGroupVals(expGroup.id,ttMetric);
+    var t=welchT(ctrlVals,expVals);
+    var d=t?cohenD(ctrlVals,expVals):null;
+    if(!t){
+      h+='<tr><td style="font-weight:500">'+esc(ctrlGroup.name)+' vs '+esc(expGroup.name)+'</td>'
+        +'<td class="mn" colspan="10" style="color:var(--warn-text)">Cannot compute (zero variance)</td></tr>';
+      return;
+    }
+    // Bonferroni-adjusted p = min(raw_p × m, 1) — multiplying by m is equivalent to
+    // dividing the significance threshold α by m, but allows direct comparison to α = 0.05.
+    var pBonf=Math.min(1,t.p*m);
+    var sig=pBonf<0.05;
+    var sigColor=sig?'var(--success-text)':'var(--danger-text)';
+    var sigLabel=sig?'✓ Significant':'✗ Not significant';
+    var dStr=d!==null?d.toFixed(4)+' ('+dLabel(d)+')':'—';
+    postHocResults.push({expName:expGroup.name,ctrlN:t.nA,expN:t.nB,
+      ctrlMean:t.meanA,expMean:t.meanB,t:t.t,df:t.df,
+      pRaw:t.p,pBonf:pBonf,sig:sig,d:d});
+    h+='<tr>'
+      +'<td style="font-weight:500">'+esc(ctrlGroup.name)+' vs '+esc(expGroup.name)+'</td>'
+      +'<td class="mn">'+t.nA+'</td>'
+      +'<td class="mn">'+t.nB+'</td>'
+      +'<td class="mn">'+t.meanA.toFixed(6)+'</td>'
+      +'<td class="mn">'+t.meanB.toFixed(6)+'</td>'
+      +'<td class="mn">'+t.t.toFixed(4)+'</td>'
+      +'<td class="mn">'+t.df.toFixed(2)+'</td>'
+      +'<td class="mn">'+t.p.toFixed(6)+'</td>'
+      +'<td class="mn">'+pBonf.toFixed(6)+'</td>'
+      +'<td class="mn">'+dStr+'</td>'
+      +'<td><span style="font-weight:600;color:'+sigColor+'">'+sigLabel+'</span></td>'
+      +'</tr>';
+  });
+  h+='</tbody></table></div>';
+  res.innerHTML=h;
+
+  window._anovaRes={
+    ctrlName:ctrlGroup.name,metric:ttMetric,
+    k:omnibusGroups.length,N:omnibusVals.reduce(function(s,v){return s+v.length},0),
+    m:m,alphaBonf:alphaBonf,anova:anova,results:postHocResults
+  };
 }
 
 /* ================================================================
@@ -1838,6 +2253,170 @@ function saveGraph(mode, name){
   a.href=c.toDataURL('image/png');
   a.click();
   showToast('✓ '+(name||('acid_graph_'+mode))+'.png saved');
+}
+
+/* ================================================================
+   SAVE GRAPH AS SVG — same layout as the PNG export but produces a
+   resolution-independent SVG file suitable for editing in Illustrator,
+   Inkscape, or embedding directly in academic figures.
+   ================================================================ */
+// Builds SVG markup that mirrors the canvas output in saveGraph() exactly:
+// same layout constants, axis ranges, tick logic, series rendering, bound
+// handles, and legend. A <clipPath> is used to prevent series lines from
+// bleeding outside the plot area (equivalent to the canvas clipping region).
+function saveGraphSVG(mode,name){
+  // Build vis array — identical logic to saveGraph()
+  var vis=[];
+  if(mode==='visible'||mode==='files'){
+    files.forEach(function(f){
+      if(fileGroupMap[f.id]!==null)return;
+      if(mode==='visible'&&!lineVis['file-'+f.id])return;
+      vis.push({series:fileSeriesOf(f.id),color:FCOLS[f.id%FCOLS.length],thick:false,label:f.name});
+    });
+  }
+  if(mode==='visible'||mode==='groups'){
+    groups.forEach(function(g){
+      var members=files.filter(function(f){return fileGroupMap[f.id]===g.id});
+      if(!members.length)return;
+      if(mode==='visible'&&!lineVis['group-'+g.id])return;
+      vis.push({series:groupSeriesOf(g.id),color:GCOLS[g.id%GCOLS.length],thick:true,label:g.name});
+    });
+  }
+  if(!vis.length){showToast('No data to save.');return;}
+
+  // Layout constants — kept identical to saveGraph() so PNG and SVG exports are visually equivalent
+  var W=1000;
+  var TITLE_H=44;
+  var SP={l:80,r:24,t:TITLE_H+24,b:52};
+  var PLOT_H=380;
+  var LEG_ITEM_W=180,LEG_ITEM_H=24,LEG_PAD=16;
+  var legsPerRow=Math.max(1,Math.floor((W-LEG_PAD*2)/LEG_ITEM_W));
+  var legRows=Math.ceil(vis.length/legsPerRow);
+  var LEG_H=legRows*LEG_ITEM_H+20;
+  var TOTAL_H=SP.t+PLOT_H+SP.b+LEG_H+16;
+  var pw=W-SP.l-SP.r;
+  var ph=PLOT_H;
+
+  // Axis ranges — same padding formula as saveGraph()
+  var allT=[],allY=[];
+  vis.forEach(function(s){s.series.forEach(function(p){allT.push(p.time);allY.push(p.avg)})});
+  var xMin=Math.min.apply(null,allT),xMax=Math.max.apply(null,allT);if(xMin===xMax)xMax=xMin+1;
+  var yMin=Math.min.apply(null,allY),yMax=Math.max.apply(null,allY);if(yMin===yMax){yMin-=0.01;yMax+=0.01;}
+  var yPad=(yMax-yMin)*0.14,yLo=yMin-yPad,yHi=yMax+yPad;
+  var tx=function(v){return SP.l+((v-xMin)/(xMax-xMin))*pw};
+  var ty=function(v){return SP.t+ph-((v-yLo)/(yHi-yLo))*ph};
+
+  var lC='rgba(0,0,0,0.55)';
+  var gC='rgba(0,0,0,0.07)';
+
+  // Escape XML special characters for safe inline text
+  function xe(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+  var els=[];
+
+  // White background
+  els.push('<rect width="'+W+'" height="'+TOTAL_H+'" fill="#ffffff"/>');
+
+  // Clip path — constrains series lines to the plot rectangle, preventing overflow
+  els.push('<defs><clipPath id="pc"><rect x="'+SP.l+'" y="'+SP.t+'" width="'+pw+'" height="'+ph+'"/></clipPath></defs>');
+
+  // Title
+  els.push('<text x="'+(W/2)+'" y="26" text-anchor="middle" '
+    +'font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="18" font-weight="bold" fill="#111111">'
+    +'Calcium Imaging Data</text>');
+
+  // Y grid lines and tick labels (6 evenly-spaced ticks from yLo to yHi)
+  for(var i=0;i<=5;i++){
+    var yv=yLo+(yHi-yLo)*i/5;
+    var ypx=ty(yv);
+    els.push('<line x1="'+SP.l+'" y1="'+ypx+'" x2="'+(W-SP.r)+'" y2="'+ypx+'" stroke="'+gC+'" stroke-width="0.5"/>');
+    els.push('<text x="'+(SP.l-6)+'" y="'+(ypx+4)+'" text-anchor="end" '
+      +'font-family="-apple-system,sans-serif" font-size="11" fill="'+lC+'">'+xe(fmt(yv))+'</text>');
+  }
+
+  // X grid lines and tick labels — same stride logic (≤10 ticks) as saveGraph()
+  var ref0=vis[0].series;
+  var xStep=Math.max(1,Math.ceil(ref0.length/10));
+  ref0.forEach(function(p,idx){
+    if(idx%xStep!==0)return;
+    var xpx=tx(p.time);
+    els.push('<line x1="'+xpx+'" y1="'+SP.t+'" x2="'+xpx+'" y2="'+(SP.t+ph)+'" stroke="'+gC+'" stroke-width="0.5"/>');
+    els.push('<text x="'+xpx+'" y="'+(SP.t+ph+16)+'" text-anchor="middle" '
+      +'font-family="-apple-system,sans-serif" font-size="11" fill="'+lC+'">'+xe(fmt(p.time))+'</text>');
+  });
+
+  // Axis titles — Y label uses SVG transform to rotate in place (equivalent to ctx.rotate)
+  els.push('<text x="'+(SP.l+pw/2)+'" y="'+(SP.t+ph+SP.b-6)+'" text-anchor="middle" '
+    +'font-family="-apple-system,sans-serif" font-size="13" fill="'+lC+'">Time (s)</text>');
+  els.push('<text transform="translate(16,'+(SP.t+ph/2)+') rotate(-90)" text-anchor="middle" '
+    +'font-family="-apple-system,sans-serif" font-size="13" fill="'+lC+'">Fluorescence (arb. units)</text>');
+
+  // Averaging-window shading (same subtle grey rectangle as on-screen and in PNG)
+  var bLx=Math.max(SP.l,tx(boundL)),bRx=Math.min(W-SP.r,tx(boundR));
+  els.push('<rect x="'+bLx+'" y="'+SP.t+'" width="'+(bRx-bLx)+'" height="'+ph+'" fill="rgba(0,0,0,0.04)"/>');
+
+  // Series lines and dots — all clipped to plot area via clip-path="url(#pc)"
+  vis.forEach(function(s){
+    var pts=s.series.map(function(p){return tx(p.time)+','+ty(p.avg)}).join(' ');
+    var dash=s.thick?'stroke-dasharray="7,4"':'';
+    var lw=s.thick?3:1.8;
+    els.push('<polyline points="'+pts+'" fill="none" stroke="'+s.color+'" stroke-width="'+lw+'" '+dash+' clip-path="url(#pc)"/>');
+    // Individual file lines also have circular data-point markers (groups do not)
+    if(!s.thick){
+      s.series.forEach(function(p){
+        els.push('<circle cx="'+tx(p.time)+'" cy="'+ty(p.avg)+'" r="3.5" '
+          +'fill="'+s.color+'" stroke="#ffffff" stroke-width="1.2" clip-path="url(#pc)"/>');
+      });
+    }
+  });
+
+  // Bound handles — dashed vertical line + coloured tab + time label below axis
+  function svgBound(bx,col,side,bTime){
+    var axBot=SP.t+ph;
+    // Dashed vertical line across full plot height
+    els.push('<line x1="'+bx+'" y1="'+SP.t+'" x2="'+bx+'" y2="'+axBot+'" '
+      +'stroke="'+col+'" stroke-width="2" stroke-dasharray="5,4"/>');
+    // Coloured tab rectangle (rx="3" matches rrect radius used in canvas version)
+    var hw=12,hh=16,hx=side==='L'?bx:bx-hw,hy=SP.t+ph/2-hh/2;
+    els.push('<rect x="'+hx+'" y="'+hy+'" width="'+hw+'" height="'+hh+'" rx="3" fill="'+col+'"/>');
+    // Arrow glyph centred on the tab
+    var ax=side==='L'?bx+hw/2:bx-hw/2;
+    els.push('<text x="'+ax+'" y="'+(hy+hh/2+3.5)+'" text-anchor="middle" '
+      +'font-size="8" font-weight="bold" fill="#ffffff">'+(side==='L'?'▶':'◀')+'</text>');
+    // Time value printed just below the plot area
+    els.push('<text x="'+bx+'" y="'+(axBot+12)+'" text-anchor="middle" '
+      +'font-family="-apple-system,sans-serif" font-size="10" font-weight="bold" fill="'+col+'">'+xe(fmt(bTime))+'</text>');
+  }
+  svgBound(tx(boundL),'#f59e0b','L',boundL);
+  svgBound(tx(boundR),'#8b5cf6','R',boundR);
+
+  // Legend below x-axis — line swatch + optional dot + label, same grid layout as PNG
+  var legTop=SP.t+ph+SP.b+4;
+  vis.forEach(function(s,i){
+    var col=Math.floor(i%legsPerRow);
+    var row=Math.floor(i/legsPerRow);
+    var lx=LEG_PAD+col*LEG_ITEM_W;
+    var ly=legTop+row*LEG_ITEM_H;
+    var dash=s.thick?'stroke-dasharray="6,3"':'';
+    var lw=s.thick?3:1.8;
+    els.push('<line x1="'+lx+'" y1="'+(ly+8)+'" x2="'+(lx+22)+'" y2="'+(ly+8)+'" '
+      +'stroke="'+s.color+'" stroke-width="'+lw+'" '+dash+'/>');
+    if(!s.thick){
+      els.push('<circle cx="'+(lx+11)+'" cy="'+(ly+8)+'" r="3" fill="'+s.color+'"/>');
+    }
+    var fw=s.thick?' font-weight="600"':'';
+    els.push('<text x="'+(lx+28)+'" y="'+(ly+12)+'" font-family="-apple-system,sans-serif" font-size="12" fill="#222222"'+fw+'>'+xe(s.label)+'</text>');
+  });
+
+  // Assemble and trigger download
+  var svg='<?xml version="1.0" encoding="UTF-8"?>\n'
+    +'<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+TOTAL_H
+    +'" viewBox="0 0 '+W+' '+TOTAL_H+'">\n'
+    +els.join('\n')+'\n</svg>';
+  var fname=(name||('acid_graph_'+mode))+'.svg';
+  var blob=new Blob([svg],{type:'image/svg+xml'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();
+  showToast('✓ '+fname+' saved');
 }
 
 // Draws a bound handle into the off-screen save canvas (no floating series-value labels —
