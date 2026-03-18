@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: "ACID — Andrew's Calcium Imaging Decoder"
+message: "If you use this software, please cite it as below."
+type: software
+version: 0.1.0
+date-released: 2026-03-18
+license: CC-BY-NC-4.0
+repository-code: https://github.com/andrewjamesbrasington/Andrews-Calcium-Imaging-Decoder
+authors:
+  - family-names: Brasington
+    given-names: Andrew J.
+    orcid: https://orcid.org/0009-0006-8782-0248
+abstract: >
+  ACID (Andrew's Calcium Imaging Decoder) is a desktop application for
+  processing and analysing calcium imaging data. It supports multi-file
+  loading, automatic metadata detection, background subtraction,
+  interactive graphing, group statistics, and Welch's two-tailed t-tests
+  for comparing experimental conditions.
+keywords:
+  - calcium imaging
+  - fluorescence
+  - neuroscience
+  - data analysis
+  - desktop application
