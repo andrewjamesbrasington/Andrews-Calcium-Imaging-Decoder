@@ -1,0 +1,1658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACID</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fff;--bg2:#f5f5f4;--bg3:#e7e5e4;
+  --text:#1c1917;--text2:#57534e;--text3:#a8a29e;
+  --border:rgba(0,0,0,0.1);--border2:rgba(0,0,0,0.22);
+  --info-bg:#eff6ff;--info-text:#1d4ed8;--info-border:rgba(59,130,246,0.35);
+  --warn-bg:#fffbeb;--warn-text:#92400e;
+  --success-bg:#f0fdf4;--success-text:#166534;
+  --danger-bg:#fef2f2;--danger-text:#b91c1c;
+  --purple-bg:#f5f3ff;--purple-text:#6d28d9;
+  --r:8px;--rl:12px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1917;--bg2:#292524;--bg3:#44403c;
+  --text:#fafaf9;--text2:#a8a29e;--text3:#57534e;
+  --border:rgba(255,255,255,0.1);--border2:rgba(255,255,255,0.22);
+  --info-bg:#1e3a5f;--info-text:#93c5fd;--info-border:rgba(59,130,246,0.4);
+  --warn-bg:#451a03;--warn-text:#fde68a;
+  --success-bg:#052e16;--success-text:#86efac;
+  --danger-bg:#3f1515;--danger-text:#fca5a5;
+  --purple-bg:#2e1065;--purple-text:#c4b5fd;
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.app{max-width:1060px;margin:0 auto;padding:1.25rem 1rem 3rem}
+header{margin-bottom:1.5rem;border-bottom:0.5px solid var(--border);padding-bottom:1rem;display:flex;align-items:center;gap:14px}
+header h1{font-size:28px;font-weight:800;letter-spacing:0.1em;color:var(--text)}
+header p{font-size:12px;color:var(--text3)}
+header img{width:48px;height:48px;border-radius:10px;flex-shrink:0}
+.stage-bar{display:flex;border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:1.5rem}
+.sb{flex:1;padding:8px 4px;font-size:11px;font-weight:500;background:transparent;border:none;border-right:0.5px solid var(--border);cursor:pointer;color:var(--text3);white-space:nowrap}
+.sb:last-child{border-right:none}
+.sb.active{background:var(--bg2);color:var(--text)}
+.sb:disabled{opacity:0.3;cursor:not-allowed}
+.panel{display:none}.panel.active{display:block}
+.btn{padding:7px 14px;font-size:13px;font-weight:500;border:0.5px solid var(--border2);border-radius:var(--r);background:transparent;cursor:pointer;color:var(--text)}
+.btn:hover{background:var(--bg2)}.btn:active{transform:scale(0.98)}
+.btn-p{background:var(--info-bg);color:var(--info-text);border-color:var(--info-border)}
+.btn-p:hover{opacity:0.85;background:var(--info-bg)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.frow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:1rem}
+
+/* Load */
+.drop-z{border:0.5px dashed var(--border2);border-radius:var(--rl);padding:2.5rem 1rem;text-align:center;cursor:pointer;transition:background .15s}
+.drop-z:hover,.drop-z.over{background:var(--bg2)}
+.file-cards{margin-top:1rem;display:flex;flex-direction:column;gap:5px}
+.file-card{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--bg2);border-radius:var(--r);font-size:12px}
+.file-card .fn{flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ref-badge{padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:var(--warn-bg);color:var(--warn-text);flex-shrink:0}
+.dot8{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* Grid */
+.grid-scroll{overflow:auto;max-height:380px;border:0.5px solid var(--border);border-radius:var(--r)}
+table.sg{border-collapse:collapse;font-size:11px;min-width:100%}
+table.sg thead tr th{position:sticky;top:0;z-index:2;padding:5px 8px;border-bottom:0.5px solid var(--border);border-right:0.5px solid var(--border);font-weight:600;font-size:10px;white-space:nowrap;text-align:center;cursor:default;min-width:52px}
+table.sg th:last-child{border-right:none}
+table.sg th.th-rn{background:var(--bg2);color:var(--text3);min-width:28px}
+table.sg th.th-time{background:var(--warn-bg);color:var(--warn-text)}
+table.sg th.th-bg{background:var(--purple-bg);color:var(--purple-text)}
+table.sg th.th-on{background:var(--info-bg);color:var(--info-text);cursor:pointer}
+table.sg th.th-on:hover{opacity:0.8}
+table.sg th.th-off{background:var(--bg3);color:var(--text3);cursor:pointer;text-decoration:line-through}
+table.sg td{padding:4px 8px;border-bottom:0.5px solid var(--border);border-right:0.5px solid var(--border);white-space:nowrap;font-family:'SF Mono',Menlo,monospace;font-size:11px;text-align:right}
+table.sg td:last-child{border-right:none}
+table.sg td.rn{background:var(--bg2);color:var(--text3);font-size:10px;text-align:center;font-family:inherit;cursor:default;font-family:-apple-system,sans-serif}
+table.sg td.pre{color:var(--text3);font-family:-apple-system,sans-serif;font-size:11px;text-align:left;font-style:italic}
+table.sg tr.drow td:not(.rn){cursor:pointer}
+table.sg tr.pre-row td{cursor:pointer;color:var(--text3);font-style:italic}
+table.sg tr.pre-row:hover td{background:var(--bg2)}
+table.sg tr.drow:hover td{background:var(--bg2)}
+table.sg tr.srow td{background:var(--warn-bg)!important;color:var(--warn-text)!important}
+table.sg tr.srow td.rn{font-weight:700}
+table.sg td.dimcell{color:var(--text3)!important;text-decoration:line-through}
+
+/* Detect bar & toggles */
+.det-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 12px;background:var(--bg2);border-radius:var(--r);margin-bottom:10px;font-size:12px}
+.dc{padding:3px 9px;border-radius:10px;font-size:11px;font-weight:500}
+.dc-t{background:var(--warn-bg);color:var(--warn-text)}
+.dc-c{background:var(--info-bg);color:var(--info-text)}
+.dc-b{background:var(--purple-bg);color:var(--purple-text)}
+.dc-r{background:var(--success-bg);color:var(--success-text)}
+.cell-toggles{display:flex;flex-wrap:wrap;gap:5px;padding:8px 12px;background:var(--bg2);border-radius:var(--r);margin-bottom:10px}
+.ctog{padding:3px 9px;border-radius:10px;font-size:11px;font-weight:500;cursor:pointer;user-select:none;border:0.5px solid transparent}
+.ctog.on{background:var(--info-bg);color:var(--info-text);border-color:var(--info-border)}
+.ctog.off{background:var(--bg3);color:var(--text3);text-decoration:line-through}
+.ctog-lock{padding:3px 9px;border-radius:10px;font-size:11px;font-weight:500;cursor:default;user-select:none}
+
+/* Align */
+.align-list{display:flex;flex-direction:column;gap:8px;margin-bottom:1rem}
+.aitem{border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden}
+.aitem-hdr{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg2);cursor:pointer;font-size:13px;user-select:none}
+.aitem-hdr:hover{background:var(--bg3)}
+.aitem-body{display:none;padding:12px;border-top:0.5px solid var(--border)}
+.aitem-body.open{display:block}
+.astatus{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;margin-left:auto;flex-shrink:0}
+.a-ok{background:var(--success-bg);color:var(--success-text)}
+.a-warn{background:var(--warn-bg);color:var(--warn-text)}
+.a-rev{background:var(--info-bg);color:var(--info-text);border:0.5px solid var(--info-border)}
+.a-confirmed{background:var(--success-bg);color:var(--success-text);border:0.5px solid var(--success-text)}
+.chevron{font-size:10px;color:var(--text3);transition:transform .2s;flex-shrink:0}
+.chevron.open{transform:rotate(90deg)}
+
+/* Grouping */
+.group-area{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.pool-col{flex:0 0 200px}
+.pool-col h3{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px}
+.drop-pool{min-height:60px;border:0.5px dashed var(--border2);border-radius:var(--r);padding:8px;display:flex;flex-direction:column;gap:6px;transition:background .15s}
+.drop-pool.drag-over{background:var(--info-bg);border-color:var(--info-text)}
+.drag-chip{display:flex;align-items:center;gap:7px;padding:6px 10px;background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--r);font-size:12px;cursor:grab;user-select:none;font-weight:500}
+.drag-chip .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.groups-col{flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px}
+.gbucket{background:var(--bg2);border-radius:var(--r);padding:10px;border-left:3px solid #ccc}
+.gbh{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.gbh input{flex:1;font-size:12px;padding:4px 7px;border:0.5px solid var(--border);border-radius:5px;background:var(--bg);color:var(--text);min-width:0}
+.add-grp-row{display:flex;gap:8px;align-items:center;margin-bottom:1rem}
+.add-grp-row input{flex:1;font-size:13px;padding:7px 10px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg2);color:var(--text)}
+
+/* Graph */
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;padding:4px 9px;border-radius:var(--r);border:0.5px solid var(--border);user-select:none}
+.leg-item:hover{background:var(--bg2)}
+.leg-item.off{opacity:0.3}
+.bounds-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px}
+.bchip{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--r);border:0.5px solid var(--border);background:var(--bg2)}
+.bchip .val{font-family:'SF Mono',Menlo,monospace;font-size:12px;min-width:44px}
+.avg-chip{padding:4px 12px;border-radius:var(--r);background:var(--danger-bg);color:var(--danger-text);font-size:12px;font-weight:500;margin-left:auto}
+.chart-outer{border:0.5px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:8px}
+#dc{display:block;width:100%;cursor:default}
+.hint{font-size:11px;color:var(--text3);margin-bottom:1rem}
+
+/* Stats */
+.stat-wrap{overflow-x:auto;border:0.5px solid var(--border);border-radius:var(--r);margin-bottom:1rem}
+table.st{border-collapse:collapse;font-size:12px;width:100%}
+table.st th{padding:7px 12px;background:var(--bg2);border-bottom:0.5px solid var(--border);border-right:0.5px solid var(--border);font-weight:500;font-size:11px;color:var(--text2);white-space:nowrap;text-align:left}
+table.st th:last-child{border-right:none}
+table.st td{padding:6px 12px;border-bottom:0.5px solid var(--border);border-right:0.5px solid var(--border)}
+table.st td:last-child{border-right:none}
+table.st tr:last-child td{border-bottom:none}
+table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
+#loadErr{font-size:12px;color:var(--danger-text);margin-top:6px;min-height:18px}
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(12px);background:var(--success-bg);color:var(--success-text);border:0.5px solid var(--success-text);border-radius:var(--r);padding:9px 20px;font-size:13px;font-weight:500;opacity:0;pointer-events:none;transition:opacity 0.2s,transform 0.2s;z-index:999}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* T-Test */
+.ttest-box{margin-top:1.5rem;border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden}
+.ttest-hdr{padding:10px 14px;background:var(--bg2);border-bottom:0.5px solid var(--border);font-size:12px;font-weight:600;color:var(--text2);letter-spacing:0.01em}
+.ttest-body{padding:14px}
+.ttest-selrow{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+.ttest-selrow label{font-size:11px;font-weight:500;color:var(--text2);display:block;margin-bottom:4px}
+.ttest-selrow select{font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);min-width:150px}
+.ttest-metric{display:flex;gap:6px;margin-bottom:12px}
+.metric-btn{padding:4px 12px;font-size:12px;font-weight:500;border:0.5px solid var(--border2);border-radius:10px;background:transparent;cursor:pointer;color:var(--text3)}
+.metric-btn.active{background:var(--info-bg);color:var(--info-text);border-color:var(--info-border)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <img src="acid.png" alt="ACID" style="width:48px;height:48px;border-radius:10px">
+    <div>
+      <h1>ACID</h1>
+      <p>Andrew's Calcium Imaging Decoder</p>
+    </div>
+  </header>
+  <div class="stage-bar">
+    <button class="sb active" id="sb0" onclick="go(0)">1 — Load</button>
+    <button class="sb" id="sb1" onclick="go(1)" disabled>2 — Configure</button>
+    <button class="sb" id="sb2" onclick="go(2)" disabled>3 — Align</button>
+    <button class="sb" id="sb3" onclick="go(3)" disabled>4 — Groups</button>
+    <button class="sb" id="sb4" onclick="go(4)" disabled>5 — Graph</button>
+    <button class="sb" id="sb5" onclick="go(5)" disabled>6 — Stats</button>
+  </div>
+
+  <!-- 0: Load -->
+  <div class="panel active" id="p0">
+    <div class="drop-z" id="dz"
+      onclick="document.getElementById('fi').click()"
+      ondragover="event.preventDefault();this.classList.add('over')"
+      ondragleave="this.classList.remove('over')"
+      ondrop="this.classList.remove('over');dropFiles(event)">
+      <div style="font-size:28px;color:var(--text3)">⬆</div>
+      <strong style="font-size:15px;display:block;margin:6px 0 4px">Drop files here or click to browse</strong>
+      <p style="font-size:13px;color:var(--text2)">Select one or more CSV / LOG files — metadata rows are detected and skipped automatically</p>
+    </div>
+    <input type="file" id="fi" multiple accept=".csv,.log,.txt" style="display:none" onchange="handleFileInput(this)">
+    <div class="file-cards" id="fileCards"></div>
+    <div class="frow" style="margin-top:1rem">
+      <button class="btn btn-p" id="toConfBtn" onclick="go(1)" disabled>Configure columns →</button>
+    </div>
+    <div id="loadErr"></div>
+  </div>
+
+  <!-- 1: Configure (reference file) -->
+  <div class="panel" id="p1">
+    <div class="det-bar" id="detBar"></div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:8px">
+      <strong>Toggle cells:</strong> click a column header or the chips below to include/exclude.
+      <strong>Change data start:</strong> click any row in the grid.
+      Time and Background are fixed.
+    </p>
+    <div class="cell-toggles" id="cellToggles"></div>
+    <div class="grid-scroll" id="confGrid"></div>
+    <div class="frow" style="margin-top:1rem">
+      <button class="btn btn-p" onclick="go(2)">Continue →</button>
+      <button class="btn" onclick="go(0)">← Back</button>
+      <button class="btn" id="bgSelBtn" onclick="toggleBgSelect()">Set background column</button>
+    </div>
+  </div>
+
+  <!-- 2: Align -->
+  <div class="panel" id="p2">
+    <p style="font-size:12px;color:var(--text2);margin-bottom:12px">
+      Data start rows were auto-detected for all files. Expand any file below to review and correct its start row if needed.
+    </p>
+    <div class="align-list" id="alignList"></div>
+    <div class="frow">
+      <button class="btn btn-p" onclick="go(3)">Continue to groups →</button>
+      <button class="btn" onclick="go(1)">← Back</button>
+    </div>
+  </div>
+
+  <!-- 3: Groups -->
+  <div class="panel" id="p3">
+    <p style="font-size:12px;color:var(--text2);margin-bottom:1rem">
+      Groups are <strong>optional</strong> — files without a group appear as individual lines on the graph.
+      Type a group name, click Add, then click any file row to assign it. Click an assigned file again to unassign.
+    </p>
+    <div class="add-grp-row">
+      <input type="text" id="grpNameInput" placeholder="New group name…" onkeydown="if(event.key==='Enter')addGroup()">
+      <button class="btn btn-p btn-sm" onclick="addGroup()">+ Add group</button>
+    </div>
+    <div id="groupArea"></div>
+    <div class="frow" style="margin-top:1.5rem">
+      <button class="btn btn-p" onclick="go(4)">Continue to graph →</button>
+      <button class="btn" onclick="go(2)">← Back</button>
+      <span id="grpStatus" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+  </div>
+
+  <!-- 4: Graph -->
+  <div class="panel" id="p4">
+    <div class="legend" id="legend"></div>
+    <div class="bounds-row">
+      <div class="bchip"><span style="color:#f59e0b;font-weight:600">▌ Start</span><input class="val" id="b0val" type="number" step="any" title="Type a value and press Enter" onchange="setBoundFromInput('L',this)" style="width:70px;border:none;background:transparent;font-family:'SF Mono',Menlo,monospace;font-size:12px;color:var(--text);outline:none;cursor:text"></div>
+      <div class="bchip"><span style="color:#8b5cf6;font-weight:600">▌ End</span><input class="val" id="b1val" type="number" step="any" title="Type a value and press Enter" onchange="setBoundFromInput('R',this)" style="width:70px;border:none;background:transparent;font-family:'SF Mono',Menlo,monospace;font-size:12px;color:var(--text);outline:none;cursor:text"></div>
+      <div class="avg-chip" id="avgChip">— s</div>
+    </div>
+    <div class="chart-outer"><canvas id="dc" height="400"></canvas></div>
+    <p class="hint">Drag the <span style="color:#f59e0b;font-weight:500">amber</span> and <span style="color:#8b5cf6;font-weight:500">purple</span> bounds to define the averaging window. Click legend items to toggle visibility. X axis = seconds from data start (0, 1, 2 ...). All values are background-subtracted.</p>
+    <div class="frow">
+      <button class="btn btn-p" onclick="go(5)">Compute statistics →</button>
+      <button class="btn" onclick="go(3)">← Back</button>
+      <button class="btn" onclick="saveGraph('visible')" title="Save all currently visible lines">↓ Save visible</button>
+      <button class="btn" onclick="saveGraph('groups')" title="Save all group lines (visible and hidden)">↓ Save all groups</button>
+      <button class="btn" onclick="saveGraph('files')" title="Save all individual file lines (visible and hidden)">↓ Save all files</button>
+    </div>
+  </div>
+
+  <!-- 5: Stats -->
+  <div class="panel" id="p5">
+    <div id="ttestSection" style="display:none">
+      <div class="ttest-box">
+        <div class="ttest-hdr">Two-sample t-tests — Welch's, two-tailed, α = 0.05</div>
+        <div class="ttest-body">
+          <div class="ttest-selrow">
+            <div><label>Control group</label><select id="ttCtrl" onchange="runTTest()"></select></div>
+          </div>
+          <div class="ttest-metric">
+            <button class="metric-btn active" id="mbMin" onclick="setTMetric('min')">Compare minimums</button>
+            <button class="metric-btn" id="mbMax" onclick="setTMetric('max')">Compare maximums</button>
+          </div>
+          <div id="ttestResult"></div>
+        </div>
+      </div>
+    </div>
+    <div id="statContent"></div>
+    <div class="frow" style="margin-top:1rem">
+      <button class="btn btn-p" onclick="dlCSV()">↓ Download CSV</button>
+      <button class="btn" onclick="go(4)">← Back to graph</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+function showToast(msg){
+  var t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(function(){t.classList.remove('show')},2800);
+}
+
+/* ================================================================
+   STATE
+   ================================================================ */
+var files        = [];   // [{id,name,rawRows,dataStart,numCols,headers}]
+var refIdx       = 0;
+var excludedCells= new Set();  // col indices of Cell columns to exclude
+var bgColIdx     = 0;          // which column is the background reference
+var selectingBg  = false;      // true while user is picking a new bg column
+var groups       = [];
+var fileGroupMap = {};  // fileId -> groupId | null
+var groupIdCtr   = 0;
+var lineVis      = {};
+var boundL=null, boundR=null, dragBound=null, chartMeta=null;
+var _seriesCache={}; // fid -> {series, stamp}
+var _cacheStamp=0;  // increment to invalidate all cache entries
+
+var FCOLS=['#378ADD','#1D9E75','#D85A30','#D4537E','#7F77DD','#BA7517','#E24B4A','#639922','#0891B2','#CA8A04'];
+var GCOLS=['#0F4C75','#145A32','#7B241C','#4A235A','#0E4D4D','#784212','#1B2631','#4D0013'];
+
+/* ================================================================
+   PARSING — auto-detect data start row
+   ================================================================ */
+function detectDelim(txt) {
+  var c={',':(txt.match(/,/g)||[]).length,'\t':(txt.match(/\t/g)||[]).length,'|':(txt.match(/\|/g)||[]).length,';':(txt.match(/;/g)||[]).length};
+  return Object.entries(c).sort(function(a,b){return b[1]-a[1]})[0][0];
+}
+
+function parseLog(txt) {
+  var lines=txt.trim().split(/\r?\n/).filter(function(l){return l.trim()});
+  if(!lines.length)return null;
+  var d=detectDelim(txt);
+  var allRows=lines.map(function(line){
+    return line.split(d).map(function(c){return c.trim().replace(/^"|"$/g,'')});
+  });
+  // Find first row where EVERY cell parses as a finite number
+  var dataStart=0;
+  for(var i=0;i<allRows.length;i++){
+    var row=allRows[i];
+    if(row.length>1&&row.every(function(v){
+      if(v==='')return false;
+      var n=parseFloat(v);
+      return !isNaN(n)&&isFinite(n);
+    })){dataStart=i;break;}
+  }
+  var numCols=allRows[dataStart].length;
+  // Detect if time column runs in reverse (descending) and fix it
+  var dataRows=allRows.slice(dataStart);
+  var timeReversed=false;
+  if(dataRows.length>=2){
+    var t0=parseFloat(dataRows[0][0]);
+    var t1=parseFloat(dataRows[dataRows.length-1][0]);
+    if(!isNaN(t0)&&!isNaN(t1)&&t0>t1){
+      var metaRows=allRows.slice(0,dataStart);
+      allRows=metaRows.concat(dataRows.slice().reverse());
+      timeReversed=true;
+    }
+  }
+  return{rawRows:allRows,dataStart:dataStart,numCols:numCols,headers:buildHeaders(numCols),timeReversed:timeReversed};
+}
+
+function buildHeaders(n){
+  var h=['Time'];
+  for(var i=1;i<n-1;i++)h.push('Cell '+i);
+  h.push('Background');
+  return h;
+}
+
+function getHeaders(numCols){
+  // Generate headers dynamically so background column always reads "Background"
+  // and cell columns are numbered sequentially skipping the bg position
+  var h=[];
+  var cellNum=1;
+  for(var i=0;i<numCols;i++){
+    if(i===0)h.push('Time');
+    else if(i===bgColIdx)h.push('Background');
+    else h.push('Cell '+cellNum++);
+  }
+  return h;
+}
+
+/* ================================================================
+   FILE LOADING
+   ================================================================ */
+function handleFileInput(inp){processFiles(Array.from(inp.files));}
+function dropFiles(e){e.preventDefault();processFiles(Array.from(e.dataTransfer.files));}
+
+function processFiles(arr){
+  if(!arr.length)return;
+  var pending=arr.length,results=[];
+  arr.forEach(function(f,i){
+    var r=new FileReader();
+    r.onload=function(e){
+      var p=parseLog(e.target.result);
+      if(p)results.push({idx:i,name:f.name,parsed:p});
+      if(--pending===0)finishLoad(results);
+    };
+    r.readAsText(f);
+  });
+}
+
+function finishLoad(results){
+  results.sort(function(a,b){return a.idx-b.idx});
+  files=results.map(function(r,i){
+    return{id:i,name:r.name,rawRows:r.parsed.rawRows,
+           dataStart:r.parsed.dataStart,numCols:r.parsed.numCols,
+           headers:r.parsed.headers,timeReversed:r.parsed.timeReversed};
+  });
+  refIdx=files.length>1?1:0;
+  excludedCells=new Set();
+  bgColIdx=files[refIdx].numCols-1;
+  selectingBg=false;
+  _seriesCache={};_cacheStamp=0;
+  groups=[];fileGroupMap={};files.forEach(function(f){fileGroupMap[f.id]=null;});
+  groupIdCtr=0;lineVis={};
+  renderFileCards();
+  document.getElementById('toConfBtn').disabled=false;
+  document.getElementById('loadErr').textContent='';
+}
+
+function renderFileCards(){
+  document.getElementById('fileCards').innerHTML=files.map(function(f){
+    return'<div class="file-card">'
+      +'<span class="dot8" style="background:'+FCOLS[f.id%FCOLS.length]+'"></span>'
+      +'<span class="fn">'+esc(f.name)+'</span>'
+      +(f.id===refIdx?'<span class="ref-badge">reference</span>':'')
+      +'<span style="font-size:11px;color:var(--text3)">'+f.numCols+' cols · data from row '+(f.dataStart+1)+'</span>'
+      +'</div>';
+  }).join('');
+}
+
+/* ================================================================
+   STAGE 1: Configure
+   ================================================================ */
+function renderConfigure(){
+  var f=files[refIdx];
+  var nCells=f.numCols-2;
+  var nOn=nCells-excludedCells.size;
+
+  // Detect bar
+  document.getElementById('detBar').innerHTML=
+    '<span style="font-size:12px;font-weight:500;color:var(--text2)">Data settings:</span>'
+    +'<span class="dc dc-t">Time: 1 → '+(f.rawRows.length-f.dataStart)+' s</span>'
+    +'<span class="dc dc-c">'+nCells+' Cell columns ('+nOn+' included)</span>'
+    +'<span class="dc dc-b">Background = col '+(bgColIdx+1)+'</span>'
+    +'<span class="dc dc-r">Data starts row '+(f.dataStart+1)+'</span>'
+    +(selectingBg?'<span style="font-size:11px;color:var(--info-text);font-weight:500">— click any column header to set as background</span>':'<span style="font-size:11px;color:var(--text3)">— click any data row to change start</span>');
+
+  // Toggle chips — hide bg column from toggles
+  var ct='<span class="ctog-lock dc-t" style="margin-right:2px">Time</span>';
+  for(var i=1;i<f.numCols;i++){
+    if(i===bgColIdx){
+      ct+='<span class="ctog-lock dc-b" style="margin-left:2px">Background (col '+(bgColIdx+1)+')</span>';
+      continue;
+    }
+    var on=!excludedCells.has(i);
+    var hdrs=getHeaders(f.numCols);
+    ct+='<span class="ctog '+(on?'on':'off')+'" onclick="toggleCell('+i+')" title="'+(on?'Click to exclude':'Click to include')+'">'+hdrs[i]+'</span>';
+  }
+  document.getElementById('cellToggles').innerHTML=ct;
+
+  // Grid
+  document.getElementById('confGrid').innerHTML=buildConfGrid(f);
+
+  // Button state
+  var btn=document.getElementById('bgSelBtn');
+  if(btn){
+    btn.textContent=selectingBg?'Cancel':'Set background column';
+    btn.className=selectingBg?'btn btn-p':'btn';
+  }
+}
+
+function buildConfGrid(f){
+  var html='<table class="sg"><thead><tr><th class="th-rn">#</th>';
+  var hdrs=getHeaders(f.numCols);
+  hdrs.forEach(function(h,ci){
+    if(ci===0){
+      html+='<th class="th-time">'+esc(h)+'</th>';
+    } else if(ci===bgColIdx){
+      html+='<th class="th-bg"'+(selectingBg?' onclick="setBgCol('+ci+')" title="Already background" style="cursor:default"':'')+'>'+esc(h)+'</th>';
+    } else {
+      if(selectingBg){
+        html+='<th class="th-on" onclick="setBgCol('+ci+')" title="Click to set as background" style="outline:2px dashed var(--info-text)">'+esc(h)+'</th>';
+      } else {
+        var on=!excludedCells.has(ci);
+        html+='<th class="'+(on?'th-on':'th-off')+'" onclick="toggleCell('+ci+')" title="Click to toggle">'+esc(h)+'</th>';
+      }
+    }
+  });
+  html+='</tr></thead><tbody>';
+  f.rawRows.forEach(function(row,ri){
+    var isStart=ri===f.dataStart;
+    var isData=ri>=f.dataStart;
+    var cls=isStart?'drow srow':(isData?'drow':'drow pre-row');
+    html+='<tr class="'+cls+'" onclick="setDataStart('+ri+')" title="Click to set data start here"><td class="rn">'+(ri+1)+'</td>';
+    if(!isData){
+      html+='<td class="pre" colspan="'+f.numCols+'">'+esc(row.join(' '))+'</td>';
+    }else{
+      row.forEach(function(v,ci){
+        var dc=(ci>0&&ci!==bgColIdx&&excludedCells.has(ci))?' dimcell':'';
+        html+='<td class="'+dc+'">'+esc(v)+'</td>';
+      });
+    }
+    html+='</tr>';
+  });
+  return html+'</tbody></table>';
+}
+
+function toggleBgSelect(){
+  selectingBg=!selectingBg;
+  renderConfigure();
+}
+
+function setBgCol(ci){
+  bgColIdx=ci;
+  excludedCells.delete(ci);
+  selectingBg=false;
+  invalidateSeriesCache();
+  renderConfigure();
+}
+
+function toggleCell(ci){
+  if(excludedCells.has(ci))excludedCells.delete(ci);
+  else excludedCells.add(ci);
+  invalidateSeriesCache();
+  renderConfigure();
+}
+
+function setDataStart(ri){
+  var oldStart=files[refIdx].dataStart;
+  files[refIdx].dataStart=ri;
+  // Apply the same new start to every other file that shared the old start row
+  files.forEach(function(f){
+    if(f.id===files[refIdx].id)return;
+    if(f.dataStart===oldStart)f.dataStart=ri;
+  });
+  invalidateSeriesCache();
+  renderConfigure();
+}
+
+/* ================================================================
+   STAGE 2: Align
+   ================================================================ */
+function renderAlign(){
+  var ref=files[refIdx];
+  var others=files.filter(function(f){return f.id!==ref.id});
+  if(!others.length){go(3);return;}
+
+  document.getElementById('alignList').innerHTML=others.map(function(f){
+    var same=f.dataStart===ref.dataStart;
+    var badgeHtml=f.confirmed
+      ?'<span class="astatus a-confirmed" id="ast-'+f.id+'">✓ user confirmed</span>'
+      :(f.timeReversed
+        ?'<span class="astatus a-rev" id="ast-'+f.id+'">↕ time reversed</span>'
+        :'<span class="astatus '+(same?'a-ok':'a-warn')+'" id="ast-'+f.id+'">'+(same?'✓ matches reference':'⚠ differs — click to review')+'</span>');
+    return'<div class="aitem">'
+      +'<div class="aitem-hdr" onclick="toggleAItem('+f.id+')">'
+      +'<span class="chevron" id="chev-'+f.id+'">▶</span>'
+      +'<span class="dot8" style="background:'+FCOLS[f.id%FCOLS.length]+'"></span>'
+      +'<span style="font-weight:500">'+esc(f.name)+'</span>'
+      +'<span style="font-size:11px;color:var(--text2);margin-left:4px">data starts row '+(f.dataStart+1)+'</span>'
+      +badgeHtml
+      +'</div>'
+      +'<div class="aitem-body" id="aib-'+f.id+'">'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+        +'<p style="font-size:12px;color:var(--text2);margin:0" id="arev-note-'+f.id+'">'
+          +(f.confirmed?'Row confirmed. Click Edit to make changes.'
+            :(f.timeReversed?'Row order has been reversed to correct descending time.'
+              :'Click any row to set as the data start for <strong>'+esc(f.name)+'</strong>.'))
+        +'</p>'
+        +'<button class="btn btn-sm" id="arev-btn-'+f.id+'" onclick="toggleReversal('+f.id+');event.stopPropagation()"'+(f.confirmed?' disabled':'')+'>'+(f.timeReversed?'Undo reversal':'Reverse time')+'</button>'
+        +'<button class="btn btn-sm'+(f.confirmed?' btn-p':'')+'" id="aconf-btn-'+f.id+'" onclick="toggleConfirm('+f.id+');event.stopPropagation()">'+(f.confirmed?'Edit':'Confirm')+'</button>'
+      +'</div>'
+      +'<div class="grid-scroll" id="agrid-'+f.id+'">'+buildAlignGrid(f)+'</div>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function buildAlignGrid(f){
+  var locked=f.confirmed;
+  var html='<table class="sg"><thead><tr><th class="th-rn">#</th>';
+  var hdrs=getHeaders(f.numCols);
+  hdrs.forEach(function(h,ci){
+    if(ci===0)html+='<th class="th-time">'+esc(h)+'</th>';
+    else if(ci===bgColIdx)html+='<th class="th-bg">'+esc(h)+'</th>';
+    else html+='<th class="'+(!excludedCells.has(ci)?'th-on':'th-off')+'">'+esc(h)+'</th>';
+  });
+  html+='</tr></thead><tbody>';
+  f.rawRows.forEach(function(row,ri){
+    var isStart=ri===f.dataStart;
+    var cls=isStart?'drow srow':'drow';
+    var clickAttr=locked?'':' onclick="setAlignStart('+f.id+','+ri+')"';
+    var style=locked?'cursor:default':'';
+    html+='<tr class="'+cls+'"'+clickAttr+(style?' style="'+style+'"':'')+'>'+
+      '<td class="rn">'+(ri+1)+'</td>';
+    if(ri<f.dataStart){
+      html+='<td class="pre" colspan="'+f.numCols+'">'+esc(row.join(' '))+'</td>';
+    }else{
+      row.forEach(function(v){html+='<td>'+esc(v)+'</td>'});
+    }
+    html+='</tr>';
+  });
+  return html+'</tbody></table>';
+}
+
+function toggleAItem(fid){
+  var body=document.getElementById('aib-'+fid);
+  var chev=document.getElementById('chev-'+fid);
+  if(body){body.classList.toggle('open');if(chev)chev.classList.toggle('open');}
+}
+
+function toggleConfirm(fid){
+  var f=files.find(function(x){return x.id===fid});
+  if(!f)return;
+  f.confirmed=!f.confirmed;
+  var ref=files[refIdx];
+  var same=f.dataStart===ref.dataStart;
+  // Update badge
+  var statusEl=document.getElementById('ast-'+fid);
+  if(statusEl){
+    if(f.confirmed){
+      statusEl.className='astatus a-confirmed';
+      statusEl.textContent='✓ user confirmed';
+    } else if(f.timeReversed){
+      statusEl.className='astatus a-rev';
+      statusEl.textContent='↕ time reversed';
+    } else {
+      statusEl.className='astatus '+(same?'a-ok':'a-warn');
+      statusEl.textContent=same?'✓ matches reference':'⚠ differs — click to review';
+    }
+  }
+  // Update note
+  var note=document.getElementById('arev-note-'+fid);
+  if(note)note.innerHTML=f.confirmed?'Row confirmed. Click Edit to make changes.'
+    :(f.timeReversed?'Row order has been reversed to correct descending time.'
+      :'Click any row to set as the data start for <strong>'+esc(f.name)+'</strong>.');
+  // Update reversal button disabled state
+  var revBtn=document.getElementById('arev-btn-'+fid);
+  if(revBtn)revBtn.disabled=f.confirmed;
+  // Update confirm button label and style
+  var confBtn=document.getElementById('aconf-btn-'+fid);
+  if(confBtn){
+    confBtn.textContent=f.confirmed?'Edit':'Confirm';
+    confBtn.className='btn btn-sm'+(f.confirmed?' btn-p':'');
+  }
+  // Rebuild grid to add/remove row click handlers
+  var grid=document.getElementById('agrid-'+fid);
+  if(grid)grid.innerHTML=buildAlignGrid(f);
+}
+
+function setAlignStart(fid,ri){
+  var f=files.find(function(x){return x.id===fid});
+  if(!f||f.confirmed)return;
+  f.dataStart=ri;
+  invalidateSeriesCache();
+  var grid=document.getElementById('agrid-'+fid);
+  if(grid)grid.innerHTML=buildAlignGrid(f);
+  // Update status badge and row label
+  var ref=files[refIdx];
+  var same=f.dataStart===ref.dataStart;
+  var statusEl=document.getElementById('ast-'+fid);
+  if(statusEl&&!f.timeReversed){
+    statusEl.className='astatus '+(same?'a-ok':'a-warn');
+    statusEl.textContent=same?'✓ matches reference':'⚠ differs — click to review';
+  }
+  var body=document.getElementById('aib-'+fid);
+  var hdr=body?body.previousElementSibling:null;
+  if(hdr){
+    var rowLabel=hdr.querySelectorAll('span')[3];
+    if(rowLabel)rowLabel.textContent='data starts row '+(f.dataStart+1);
+  }
+}
+
+function toggleReversal(fid){
+  var f=files.find(function(x){return x.id===fid});
+  if(!f||f.confirmed)return;
+  var meta=f.rawRows.slice(0,f.dataStart);
+  var data=f.rawRows.slice(f.dataStart).reverse();
+  f.rawRows=meta.concat(data);
+  f.timeReversed=!f.timeReversed;
+  invalidateSeriesCache();
+  // Update grid
+  var grid=document.getElementById('agrid-'+fid);
+  if(grid)grid.innerHTML=buildAlignGrid(f);
+  // Update button label
+  var btn=document.getElementById('arev-btn-'+fid);
+  if(btn)btn.textContent=f.timeReversed?'Undo reversal':'Reverse time';
+  // Update note text
+  var note=document.getElementById('arev-note-'+fid);
+  if(note)note.innerHTML=f.timeReversed?'Row order has been reversed to correct descending time.':'Click any row to set as the data start for <strong>'+esc(f.name)+'</strong>.';
+  // Update status badge
+  var ref=files[refIdx];
+  var same=f.dataStart===ref.dataStart;
+  var statusEl=document.getElementById('ast-'+fid);
+  if(statusEl){
+    if(f.timeReversed){
+      statusEl.className='astatus a-rev';
+      statusEl.textContent='↕ time reversed';
+    } else {
+      statusEl.className='astatus '+(same?'a-ok':'a-warn');
+      statusEl.textContent=same?'✓ matches reference':'⚠ differs — click to review';
+    }
+  }
+}
+// fileGroupMap: fileId -> groupId or null
+var fileGroupMap = {};
+
+function initGrouping(){
+  files.forEach(function(f){
+    if(lineVis['file-'+f.id]===undefined)lineVis['file-'+f.id]=true;
+    if(fileGroupMap[f.id]===undefined)fileGroupMap[f.id]=null;
+  });
+  refreshGrouping();
+}
+
+function refreshGrouping(){
+  var area=document.getElementById('groupArea');
+  if(!area)return;
+
+  // File list
+  var h='<div style="margin-bottom:1rem">';
+  h+='<div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:6px">Files — click a group button to assign</div>';
+  files.forEach(function(f){
+    var gid=fileGroupMap[f.id];
+    var g=gid!==null?groups.find(function(x){return x.id===gid}):null;
+    h+='<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg2);border-radius:var(--r);margin-bottom:5px;font-size:12px">';
+    h+='<span class="dot8" style="background:'+FCOLS[f.id%FCOLS.length]+'"></span>';
+    h+='<span style="flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(f.name)+'</span>';
+    // Group buttons
+    groups.forEach(function(grp){
+      var assigned=(fileGroupMap[f.id]===grp.id);
+      var col=GCOLS[grp.id%GCOLS.length];
+      h+='<button onclick="assignFile('+f.id+','+grp.id+')" style="'
+        +'padding:3px 10px;font-size:11px;font-weight:500;border-radius:10px;cursor:pointer;border:0.5px solid '+col+';'
+        +(assigned?'background:'+col+';color:#fff;':'background:transparent;color:'+col+';')
+        +'">'+esc(grp.name)+'</button>';
+    });
+    if(g){
+      h+='<span style="font-size:11px;color:var(--text3);margin-left:4px">✓ '+esc(g.name)+'</span>';
+    }else{
+      h+='<span style="font-size:11px;color:var(--text3);margin-left:4px">ungrouped</span>';
+    }
+    h+='</div>';
+  });
+  h+='</div>';
+
+  // Group summary
+  if(groups.length){
+    h+='<div style="display:flex;flex-wrap:wrap;gap:8px">';
+    groups.forEach(function(g){
+      var col=GCOLS[g.id%GCOLS.length];
+      var members=files.filter(function(f){return fileGroupMap[f.id]===g.id});
+      h+='<div style="background:var(--bg2);border-radius:var(--r);padding:8px 12px;border-left:3px solid '+col+';min-width:160px">';
+      h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">';
+      h+='<span class="dot8" style="background:'+col+'"></span>';
+      h+='<input type="text" value="'+esc(g.name)+'" oninput="renameGroup('+g.id+',this.value)" '
+        +'style="flex:1;font-size:12px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;background:var(--bg);color:var(--text);min-width:0">';
+      h+='<button onclick="removeGroup('+g.id+')" style="padding:2px 7px;font-size:11px;border:0.5px solid var(--border2);border-radius:5px;background:transparent;cursor:pointer;color:var(--text)">✕</button>';
+      h+='</div>';
+      h+='<div style="font-size:11px;color:var(--text3)">';
+      h+=members.length?members.map(function(f){return esc(f.name)}).join(', '):'No files assigned yet';
+      h+='</div></div>';
+    });
+    h+='</div>';
+  }
+
+  area.innerHTML=h;
+  updateGrpStatus();
+}
+
+function assignFile(fid,gid){
+  // Toggle: if already in this group, remove; otherwise assign
+  if(fileGroupMap[fid]===gid)fileGroupMap[fid]=null;
+  else fileGroupMap[fid]=gid;
+  refreshGrouping();
+}
+
+function addGroup(){
+  var inp=document.getElementById('grpNameInput');
+  var name=inp.value.trim();if(!name){inp.focus();return;}
+  var g={id:groupIdCtr++,name:name,fileIds:[]};
+  groups.push(g);lineVis['group-'+g.id]=true;
+  inp.value='';refreshGrouping();
+}
+function removeGroup(gid){
+  // Unassign any files in this group
+  Object.keys(fileGroupMap).forEach(function(fid){
+    if(fileGroupMap[fid]===gid)fileGroupMap[fid]=null;
+  });
+  groups=groups.filter(function(x){return x.id!==gid});
+  delete lineVis['group-'+gid];
+  refreshGrouping();
+}
+function renameGroup(gid,n){var g=groups.find(function(x){return x.id===gid});if(g)g.name=n;refreshGrouping();}
+
+function updateGrpStatus(){
+  var nGrouped=files.filter(function(f){return fileGroupMap[f.id]!==null}).length;
+  var nUngrouped=files.length-nGrouped;
+  var s=nGrouped?nGrouped+' file'+(nGrouped!==1?'s':'')+' in groups':'No groups created';
+  if(nUngrouped)s+=', '+nUngrouped+' ungrouped (will show individually)';
+  document.getElementById('grpStatus').textContent=s;
+}
+
+function invalidateSeriesCache(){_cacheStamp++;}
+
+/* ================================================================
+   SERIES — background subtracted, row-by-row
+   ================================================================ */
+function fileSeriesOf(fid){
+  var entry=_seriesCache[fid];
+  if(entry&&entry.stamp===_cacheStamp)return entry.series;
+  var f=files.find(function(x){return x.id===fid});if(!f)return[];
+  var cellIdxs=[];
+  for(var i=1;i<f.numCols;i++){if(i!==bgColIdx&&!excludedCells.has(i))cellIdxs.push(i);}
+  var series=f.rawRows.slice(f.dataStart).map(function(row,idx){
+    var t=idx+1;
+    var bg=parseFloat(row[bgColIdx]);
+    if(isNaN(bg))return null;
+    var vals=cellIdxs.map(function(ci){
+      return parseFloat(row[ci])-bg;
+    }).filter(function(v){return!isNaN(v)});
+    return{time:t,avg:vals.length?vals.reduce(function(a,b){return a+b},0)/vals.length:NaN};
+  }).filter(function(p){return p&&!isNaN(p.avg)});
+  _seriesCache[fid]={series:series,stamp:_cacheStamp};
+  return series;
+}
+
+function groupSeriesOf(gid){
+  // Collect all files assigned to this group via fileGroupMap
+  var memberIds=files.filter(function(f){return fileGroupMap[f.id]===gid}).map(function(f){return f.id});
+  if(!memberIds.length)return[];
+  var map={};
+  memberIds.forEach(function(fid){
+    fileSeriesOf(fid).forEach(function(p){
+      var k=p.time.toFixed(8);
+      if(!map[k])map[k]={time:p.time,vals:[]};
+      map[k].vals.push(p.avg);
+    });
+  });
+  return Object.values(map).map(function(e){
+    return{time:e.time,avg:e.vals.reduce(function(a,b){return a+b},0)/e.vals.length};
+  }).sort(function(a,b){return a.time-b.time});
+}
+
+/* ================================================================
+   STAGE 4: Graph
+   ================================================================ */
+var PAD={l:72,r:20,t:20,b:46};
+
+function initBounds(){
+  var all=[];
+  files.forEach(function(f){fileSeriesOf(f.id).forEach(function(p){all.push(p.time)})});
+  if(!all.length)return;
+  boundL=Math.min.apply(null,all);boundR=Math.max.apply(null,all);
+}
+
+function initLineVis(){
+  files.forEach(function(f){if(lineVis['file-'+f.id]===undefined)lineVis['file-'+f.id]=true});
+  groups.forEach(function(g){if(lineVis['group-'+g.id]===undefined)lineVis['group-'+g.id]=true});
+}
+
+function renderLegend(){
+  var h='';
+  // Ungrouped files as individual lines
+  files.forEach(function(f){
+    if(fileGroupMap[f.id]!==null)return;
+    var k='file-'+f.id,col=FCOLS[f.id%FCOLS.length];
+    h+='<div class="leg-item'+(lineVis[k]?'':' off')+'" onclick="toggleLine(\''+k+'\''+')">'
+      +'<svg width="22" height="12"><line x1="0" y1="6" x2="22" y2="6" stroke="'+col+'" stroke-width="2"/><circle cx="11" cy="6" r="3" fill="'+col+'"/></svg>'
+      +'<span>'+esc(f.name)+'</span></div>';
+  });
+  // Groups with members as thick dashed lines
+  groups.forEach(function(g){
+    var members=files.filter(function(f){return fileGroupMap[f.id]===g.id});
+    if(!members.length)return;
+    var k='group-'+g.id,col=GCOLS[g.id%GCOLS.length];
+    h+='<div class="leg-item'+(lineVis[k]?'':' off')+'" onclick="toggleLine(\''+k+'\''+')">'
+      +'<svg width="22" height="12"><line x1="0" y1="6" x2="22" y2="6" stroke="'+col+'" stroke-width="3" stroke-dasharray="5,3"/></svg>'
+      +'<span style="font-weight:600">'+esc(g.name)+'</span>'
+      +'<span style="font-size:10px;color:var(--text3);margin-left:4px">('+members.length+' file'+(members.length!==1?'s':'')+')</span>'
+      +'</div>';
+  });
+  document.getElementById('legend').innerHTML=h;
+}
+
+function toggleLine(k){lineVis[k]=!lineVis[k];renderLegend();redraw();}
+
+function redraw(){
+  var canvas=document.getElementById('dc');if(!canvas)return;
+  var W=canvas.offsetWidth||800;canvas.width=W;canvas.height=400;
+  var ctx=canvas.getContext('2d');ctx.clearRect(0,0,W,400);
+
+  var vis=[];
+  // Ungrouped files as individual thin lines
+  files.forEach(function(f){
+    if(fileGroupMap[f.id]!==null)return;
+    if(lineVis['file-'+f.id])vis.push({series:fileSeriesOf(f.id),color:FCOLS[f.id%FCOLS.length],thick:false,label:f.name});
+  });
+  // Groups with at least one member as thick dashed lines
+  groups.forEach(function(g){
+    var members=files.filter(function(f){return fileGroupMap[f.id]===g.id});
+    if(!members.length)return;
+    if(lineVis['group-'+g.id])vis.push({series:groupSeriesOf(g.id),color:GCOLS[g.id%GCOLS.length],thick:true,label:g.name});
+  });
+
+  if(!vis.length)return;
+  var allT=[],allY=[];
+  vis.forEach(function(s){s.series.forEach(function(p){allT.push(p.time);allY.push(p.avg)})});
+  if(!allT.length)return;
+
+  var xMin=Math.min.apply(null,allT),xMax=Math.max.apply(null,allT);if(xMin===xMax)xMax=xMin+1;
+  var yMin=Math.min.apply(null,allY),yMax=Math.max.apply(null,allY);if(yMin===yMax){yMin-=0.01;yMax+=0.01;}
+  var yPad=(yMax-yMin)*0.14,yLo=yMin-yPad,yHi=yMax+yPad;
+  var pw=W-PAD.l-PAD.r,ph=400-PAD.t-PAD.b;
+  var tx=function(v){return PAD.l+((v-xMin)/(xMax-xMin))*pw};
+  var ty=function(v){return PAD.t+ph-((v-yLo)/(yHi-yLo))*ph};
+  chartMeta={xMin:xMin,xMax:xMax,yLo:yLo,yHi:yHi,pw:pw,ph:ph,tx:tx,ty:ty,W:W};
+
+  var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches;
+  var gC=dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.06)';
+  var lC=dark?'rgba(255,255,255,0.42)':'rgba(0,0,0,0.42)';
+
+  ctx.lineWidth=0.5;
+  for(var i=0;i<=5;i++){
+    var yv=yLo+(yHi-yLo)*i/5,ypx=ty(yv);
+    ctx.strokeStyle=gC;ctx.beginPath();ctx.moveTo(PAD.l,ypx);ctx.lineTo(W-PAD.r,ypx);ctx.stroke();
+    ctx.fillStyle=lC;ctx.font='10px -apple-system,sans-serif';ctx.textAlign='right';
+    ctx.fillText(fmt(yv),PAD.l-4,ypx+4);
+  }
+  var ref0=vis[0].series,xStep=Math.max(1,Math.ceil(ref0.length/8));
+  ref0.forEach(function(p,idx){
+    if(idx%xStep!==0)return;
+    var xpx=tx(p.time);
+    ctx.strokeStyle=gC;ctx.beginPath();ctx.moveTo(xpx,PAD.t);ctx.lineTo(xpx,400-PAD.b);ctx.stroke();
+    ctx.fillStyle=lC;ctx.font='10px -apple-system,sans-serif';ctx.textAlign='center';
+    ctx.fillText(fmt(p.time),xpx,400-PAD.b+14);
+  });
+  ctx.fillStyle=lC;ctx.font='11px -apple-system,sans-serif';ctx.textAlign='center';
+  ctx.fillText('Time (s)',PAD.l+pw/2,400-4);
+  // Y axis label — rotated
+  ctx.save();
+  ctx.translate(14,PAD.t+ph/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillStyle=lC;ctx.font='11px -apple-system,sans-serif';ctx.textAlign='center';
+  ctx.fillText('Fluorescence (arb. units)',0,0);
+  ctx.restore();
+
+  var bLx=Math.max(PAD.l,tx(boundL)),bRx=Math.min(W-PAD.r,tx(boundR));
+  ctx.fillStyle=dark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.03)';
+  ctx.fillRect(bLx,PAD.t,bRx-bLx,ph);
+
+  vis.forEach(function(s){
+    ctx.strokeStyle=s.color;ctx.lineWidth=s.thick?3:1.5;
+    ctx.setLineDash(s.thick?[6,3]:[]);
+    ctx.beginPath();var started=false;
+    s.series.forEach(function(p){
+      if(!started){ctx.moveTo(tx(p.time),ty(p.avg));started=true;}
+      else ctx.lineTo(tx(p.time),ty(p.avg));
+    });
+    ctx.stroke();ctx.setLineDash([]);
+    if(!s.thick){
+      s.series.forEach(function(p){
+        ctx.beginPath();ctx.arc(tx(p.time),ty(p.avg),3.5,0,Math.PI*2);
+        ctx.fillStyle=s.color;ctx.fill();
+        ctx.strokeStyle=dark?'#1c1917':'#fff';ctx.lineWidth=1.2;ctx.stroke();
+      });
+    }
+  });
+
+  drawBound(ctx,tx(boundL),PAD.t,ph,'#f59e0b','L',boundL,vis,ty);
+  drawBound(ctx,tx(boundR),PAD.t,ph,'#8b5cf6','R',boundR,vis,ty);
+  updateReadout();
+}
+
+function drawBound(ctx,x,top,ph,col,side,boundTime,vis,ty){
+  ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash([5,4]);
+  ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,top+ph);ctx.stroke();ctx.setLineDash([]);
+  var hw=12,hh=16,hx=side==='L'?x:x-hw;
+  ctx.fillStyle=col;rrect(ctx,hx,top+ph/2-hh/2,hw,hh,3);ctx.fill();
+  ctx.fillStyle='#fff';ctx.font='bold 8px sans-serif';ctx.textAlign='center';
+  ctx.fillText(side==='L'?'▶':'◀',x+(side==='L'?hw/2:-hw/2),top+ph/2+3.5);
+
+  // Y-value labels for each visible series at this bound's time
+  if(!vis||!ty)return;
+  var labels=[];
+  vis.forEach(function(s){
+    var pt=s.series.find(function(p){return p.time===boundTime});
+    if(pt===undefined||isNaN(pt.avg))return;
+    labels.push({val:pt.avg,color:s.color,ypx:ty(pt.avg)});
+  });
+  if(!labels.length)return;
+
+  ctx.font='9px -apple-system,sans-serif';
+  var labelW=64,labelH=14,gap=2;
+  labels.forEach(function(lb){
+    var lx=side==='L'?x+4:x-4-labelW;
+    var ly=lb.ypx-labelH/2;
+    // clamp vertically within chart
+    ly=Math.max(top+2,Math.min(top+ph-labelH-2,ly));
+    // background pill
+    ctx.fillStyle=lb.color;
+    rrect(ctx,lx,ly,labelW,labelH,4);ctx.fill();
+    // value text
+    ctx.fillStyle='#fff';ctx.textAlign='left';
+    ctx.fillText(fmt(lb.val),lx+5,ly+labelH-3.5);
+  });
+}
+function rrect(ctx,x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
+}
+
+function setBoundFromInput(side,el){
+  var v=parseFloat(el.value);
+  if(isNaN(v))return;
+  if(!chartMeta)return;
+  v=Math.round(Math.max(chartMeta.xMin,Math.min(chartMeta.xMax,v)));
+  if(side==='L'){
+    boundL=Math.min(v,boundR-1);
+  }else{
+    boundR=Math.max(v,boundL+1);
+  }
+  redraw();
+}
+
+function updateReadout(){
+  document.getElementById('b0val').value=fmt(boundL);
+  document.getElementById('b1val').value=fmt(boundR);
+  var dur=boundR-boundL;
+  document.getElementById('avgChip').textContent=(dur>=0?dur:0)+' s window';
+}
+
+function nearBound(mx){
+  if(!chartMeta)return null;
+  var dL=Math.abs(chartMeta.tx(boundL)-mx),dR=Math.abs(chartMeta.tx(boundR)-mx),thresh=16;
+  if(dL<thresh&&dL<=dR)return'L';if(dR<thresh)return'R';return null;
+}
+function xToTime(mx){
+  if(!chartMeta)return 0;
+  var t=chartMeta.xMin+(chartMeta.xMax-chartMeta.xMin)*((mx-PAD.l)/chartMeta.pw);
+  t=Math.round(Math.max(chartMeta.xMin,Math.min(chartMeta.xMax,t)));
+  return t;
+}
+function cxy(e){
+  var r=document.getElementById('dc').getBoundingClientRect();
+  var s=e.touches?e.touches[0]:e;return{mx:s.clientX-r.left};
+}
+function onDown(e){var p=cxy(e);var b=nearBound(p.mx);if(b){dragBound=b;e.preventDefault();}}
+function onMove(e){
+  if(!chartMeta)return;var p=cxy(e);
+  if(!dragBound){document.getElementById('dc').style.cursor=nearBound(p.mx)?'ew-resize':'default';return;}
+  e.preventDefault();
+  var t=xToTime(p.mx);
+  var newL=boundL,newR=boundR;
+  if(dragBound==='L')newL=Math.min(t,boundR-1);else newR=Math.max(t,boundL+1);
+  if(newL===boundL&&newR===boundR)return;
+  boundL=newL;boundR=newR;
+  redraw();
+}
+function onUp(){dragBound=null;var c=document.getElementById('dc');if(c)c.style.cursor='default';}
+
+/* ================================================================
+   STAGE 5: Stats
+   ================================================================ */
+function psd(arr){
+  // Population standard deviation
+  if(arr.length<2)return 0;
+  var mean=arr.reduce(function(a,b){return a+b},0)/arr.length;
+  return Math.sqrt(arr.map(function(v){return(v-mean)*(v-mean)}).reduce(function(a,b){return a+b},0)/arr.length);
+}
+
+function computeStats(){
+  var out=[];
+
+  // Ungrouped visible files only
+  files.forEach(function(f){
+    if(fileGroupMap[f.id]!==null)return; // in a group — handled below
+    if(!lineVis['file-'+f.id])return;    // not visible — skip
+    var vals=fileSeriesOf(f.id).filter(function(p){return p.time>=boundL&&p.time<=boundR}).map(function(p){return p.avg});
+    if(!vals.length)return;
+    out.push({
+      label:f.name,type:'file',color:FCOLS[f.id%FCOLS.length],
+      groupLabel:null,
+      n:vals.length,
+      min:Math.min.apply(null,vals),
+      max:Math.max.apply(null,vals)
+    });
+  });
+
+  // Visible groups — include group row AND each constituent file row
+  groups.forEach(function(g){
+    var members=files.filter(function(f){return fileGroupMap[f.id]===g.id});
+    if(!members.length)return;
+    if(!lineVis['group-'+g.id])return; // group not visible — skip entirely
+
+    // Per-member stats within bounds
+    var memberStats=members.map(function(f){
+      var vals=fileSeriesOf(f.id).filter(function(p){return p.time>=boundL&&p.time<=boundR}).map(function(p){return p.avg});
+      if(!vals.length)return null;
+      return{fid:f.id,label:f.name,color:FCOLS[f.id%FCOLS.length],n:vals.length,
+             min:Math.min.apply(null,vals),max:Math.max.apply(null,vals)};
+    }).filter(function(x){return x!==null});
+    if(!memberStats.length)return;
+
+    // Group average line stats
+    var gvals=groupSeriesOf(g.id).filter(function(p){return p.time>=boundL&&p.time<=boundR}).map(function(p){return p.avg});
+    if(!gvals.length)return;
+
+    var mins=memberStats.map(function(s){return s.min});
+    var maxs=memberStats.map(function(s){return s.max});
+
+    // Group summary row
+    out.push({
+      label:g.name,type:'group',color:GCOLS[g.id%GCOLS.length],
+      n:gvals.length,
+      min:Math.min.apply(null,gvals),
+      max:Math.max.apply(null,gvals),
+      sdMin:psd(mins),
+      sdMax:psd(maxs),
+      nMembers:memberStats.length
+    });
+
+    // Individual constituent file rows (tagged with their group name)
+    memberStats.forEach(function(ms){
+      out.push({
+        label:ms.label,type:'file',color:ms.color,
+        groupLabel:g.name,
+        n:ms.n,
+        min:ms.min,
+        max:ms.max
+      });
+    });
+  });
+
+  return out;
+}
+
+function renderStats(){
+  var res=computeStats();
+  if(!res.length){
+    document.getElementById('statContent').innerHTML='<p style="color:var(--text3);font-size:13px">No visible data within the current window.</p>';
+    return;
+  }
+  var h='<p style="font-size:12px;color:var(--text2);margin-bottom:12px">'
+    +'Window <strong>'+fmt(boundL)+' — '+fmt(boundR)+'</strong> s</p>';
+
+  var groupRows=res.filter(function(r){return r.type==='group'});
+  var ungroupedFileRows=res.filter(function(r){return r.type==='file'&&r.groupLabel===null});
+
+  // Ungrouped visible files
+  if(ungroupedFileRows.length){
+    h+='<p style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">Individual files</p>';
+    h+='<div class="stat-wrap"><table class="st"><thead><tr>'
+      +'<th>File</th><th>Points in window</th><th>Min</th><th>Max</th>'
+      +'</tr></thead><tbody>';
+    ungroupedFileRows.forEach(function(r){
+      h+='<tr>'
+        +'<td style="font-weight:500"><span class="dot8" style="background:'+r.color+';display:inline-block;margin-right:7px;vertical-align:middle"></span>'+esc(r.label)+'</td>'
+        +'<td class="mn">'+r.n+'</td>'
+        +'<td class="mn">'+r.min.toFixed(6)+'</td>'
+        +'<td class="mn">'+r.max.toFixed(6)+'</td>'
+        +'</tr>';
+    });
+    h+='</tbody></table></div>';
+  }
+
+  // Visible groups — summary row then constituent files
+  if(groupRows.length){
+    groupRows.forEach(function(g){
+      h+='<p style="font-size:12px;font-weight:500;color:var(--text2);margin-top:1rem;margin-bottom:6px">'
+        +'<span class="dot8" style="background:'+g.color+';display:inline-block;margin-right:6px;vertical-align:middle"></span>'
+        +'Group: '+esc(g.label)+'</p>';
+      // Group average row
+      h+='<div class="stat-wrap" style="margin-bottom:8px"><table class="st"><thead><tr>'
+        +'<th>Group average</th><th>Files</th><th>Points in window</th>'
+        +'<th>Avg min</th><th>SD (min)</th><th>Avg max</th><th>SD (max)</th>'
+        +'</tr></thead><tbody>';
+      h+='<tr>'
+        +'<td style="font-weight:500"><span class="dot8" style="background:'+g.color+';display:inline-block;margin-right:7px;vertical-align:middle"></span>'+esc(g.label)+'</td>'
+        +'<td class="mn">'+g.nMembers+'</td>'
+        +'<td class="mn">'+g.n+'</td>'
+        +'<td class="mn">'+g.min.toFixed(6)+'</td>'
+        +'<td class="mn">'+g.sdMin.toFixed(6)+'</td>'
+        +'<td class="mn">'+g.max.toFixed(6)+'</td>'
+        +'<td class="mn">'+g.sdMax.toFixed(6)+'</td>'
+        +'</tr></tbody></table></div>';
+      // Constituent files
+      var members=res.filter(function(r){return r.type==='file'&&r.groupLabel===g.label});
+      if(members.length){
+        h+='<div class="stat-wrap"><table class="st"><thead><tr>'
+          +'<th>Constituent file</th><th>Points in window</th><th>Min</th><th>Max</th>'
+          +'</tr></thead><tbody>';
+        members.forEach(function(r){
+          h+='<tr>'
+            +'<td style="color:var(--text2)"><span class="dot8" style="background:'+r.color+';display:inline-block;margin-right:7px;vertical-align:middle"></span>'+esc(r.label)+'</td>'
+            +'<td class="mn">'+r.n+'</td>'
+            +'<td class="mn">'+r.min.toFixed(6)+'</td>'
+            +'<td class="mn">'+r.max.toFixed(6)+'</td>'
+            +'</tr>';
+        });
+        h+='</tbody></table></div>';
+      }
+    });
+  }
+
+  document.getElementById('statContent').innerHTML=h;
+  window._statsRes=res;
+  renderTTestSection();
+}
+
+function dlCSV(){
+  if(!window._statsRes)return;
+  var res=window._statsRes;
+  var lines=[
+    'ACID',
+    "# Andrew's Calcium Imaging Decoder",
+    '# Window: '+boundL+' s to '+boundR+' s',
+    '# Generated: '+new Date().toISOString(),
+    ''
+  ];
+
+  var ungroupedFiles=res.filter(function(r){return r.type==='file'&&r.groupLabel===null});
+  var groupRows=res.filter(function(r){return r.type==='group'});
+
+  if(ungroupedFiles.length){
+    lines.push('=== Individual Files ===');
+    lines.push('file,points_in_window,min,max');
+    ungroupedFiles.forEach(function(r){
+      lines.push(['"'+r.label+'"',r.n,r.min.toFixed(6),r.max.toFixed(6)].join(','));
+    });
+  }
+
+  groupRows.forEach(function(g){
+    lines.push('');
+    lines.push('=== Group: '+g.label+' ===');
+    lines.push('group,member_files,points_in_window,avg_min,sd_min,avg_max,sd_max');
+    lines.push(['"'+g.label+'"',g.nMembers,g.n,g.min.toFixed(6),g.sdMin.toFixed(6),g.max.toFixed(6),g.sdMax.toFixed(6)].join(','));
+    lines.push('');
+    lines.push('constituent_file,points_in_window,min,max');
+    var members=res.filter(function(r){return r.type==='file'&&r.groupLabel===g.label});
+    members.forEach(function(r){
+      lines.push(['"'+r.label+'"',r.n,r.min.toFixed(6),r.max.toFixed(6)].join(','));
+    });
+  });
+
+  // T-test results
+  if(window._ttestRes){
+    var tr=window._ttestRes;
+    lines.push('');
+    lines.push('=== Two-Sample t-Tests (Welch\'s, two-tailed, α = 0.05) ===');
+    lines.push('# Metric compared: '+tr.metric+'imum');
+    lines.push('# Control group: '+tr.ctrlName);
+    lines.push('');
+    lines.push('control_group,n_files,mean_'+tr.metric+',sd_'+tr.metric);
+    lines.push(['"'+tr.ctrlName+'"',tr.ctrlN,tr.ctrlMean.toFixed(6),tr.ctrlSD.toFixed(6)].join(','));
+    lines.push('');
+    lines.push('experimental_group,n_files,mean_'+tr.metric+',sd_'+tr.metric+',t_statistic,degrees_of_freedom,p_value_two_tailed,significant_at_0.05');
+    tr.results.forEach(function(row){
+      var r=row.r;
+      lines.push(['"'+row.expName+'"',r.nB,r.meanB.toFixed(6),r.sdB.toFixed(6),
+                  r.t.toFixed(4),r.df.toFixed(2),r.p.toFixed(6),row.sig?'YES':'NO'].join(','));
+    });
+  }
+
+  var b=new Blob([lines.join('\n')],{type:'text/csv'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='acid_stats.csv';a.click();
+  showToast('✓ acid_stats.csv exported successfully');
+}
+
+
+/* ================================================================
+   T-TEST (Welch's, two-tailed, α = 0.05)
+   ================================================================ */
+var ttMetric='min';
+
+function lgamma(x){
+  var c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,
+         771.32342877765313,-176.61502916214059,12.507343278686905,
+         -0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(x<0.5)return Math.log(Math.PI/Math.sin(Math.PI*x))-lgamma(1-x);
+  x-=1;
+  var a=c[0],t=x+7.5;
+  for(var i=1;i<9;i++)a+=c[i]/(x+i);
+  return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a);
+}
+
+function betacf(a,b,x){
+  var MAXIT=200,EPS=3e-7,FPMIN=1e-30;
+  var qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap;
+  if(Math.abs(d)<FPMIN)d=FPMIN;
+  d=1/d;var h=d;
+  for(var m=1;m<=MAXIT;m++){
+    var m2=2*m;
+    var aa=m*(b-m)*x/((qam+m2)*(a+m2));
+    d=1+aa*d;if(Math.abs(d)<FPMIN)d=FPMIN;
+    c=1+aa/c;if(Math.abs(c)<FPMIN)c=FPMIN;
+    d=1/d;h*=d*c;
+    aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+    d=1+aa*d;if(Math.abs(d)<FPMIN)d=FPMIN;
+    c=1+aa/c;if(Math.abs(c)<FPMIN)c=FPMIN;
+    d=1/d;var del=d*c;h*=del;
+    if(Math.abs(del-1)<EPS)break;
+  }
+  return h;
+}
+
+function betai(a,b,x){
+  if(x<=0)return 0;if(x>=1)return 1;
+  var front=Math.exp(a*Math.log(x)+b*Math.log(1-x)-lgamma(a)-lgamma(b)+lgamma(a+b));
+  if(x<(a+1)/(a+b+2))return front*betacf(a,b,x)/a;
+  return 1-front*betacf(b,a,1-x)/b;
+}
+
+function tpval(t,df){
+  // Two-tailed p-value via regularized incomplete beta function
+  var x=df/(df+t*t);
+  return betai(df/2,0.5,x);
+}
+
+function welchT(a,b){
+  var na=a.length,nb=b.length;
+  if(na<2||nb<2)return null;
+  var mA=a.reduce(function(s,v){return s+v},0)/na;
+  var mB=b.reduce(function(s,v){return s+v},0)/nb;
+  var vA=a.reduce(function(s,v){return s+(v-mA)*(v-mA)},0)/(na-1);
+  var vB=b.reduce(function(s,v){return s+(v-mB)*(v-mB)},0)/(nb-1);
+  var se=Math.sqrt(vA/na+vB/nb);
+  if(se===0)return null;
+  var t=(mA-mB)/se;
+  var df=Math.pow(vA/na+vB/nb,2)/(Math.pow(vA/na,2)/(na-1)+Math.pow(vB/nb,2)/(nb-1));
+  var p=tpval(Math.abs(t),df);
+  return{t:t,df:df,p:p,meanA:mA,meanB:mB,
+         sdA:Math.sqrt(vA),sdB:Math.sqrt(vB),nA:na,nB:nb};
+}
+
+function setTMetric(m){
+  ttMetric=m;
+  document.getElementById('mbMin').classList.toggle('active',m==='min');
+  document.getElementById('mbMax').classList.toggle('active',m==='max');
+  runTTest();
+}
+
+function getGroupVals(gid,metric){
+  var members=files.filter(function(f){return fileGroupMap[f.id]===gid});
+  return members.map(function(f){
+    var vals=fileSeriesOf(f.id)
+      .filter(function(p){return p.time>=boundL&&p.time<=boundR})
+      .map(function(p){return p.avg});
+    if(!vals.length)return null;
+    return metric==='min'?Math.min.apply(null,vals):Math.max.apply(null,vals);
+  }).filter(function(v){return v!==null});
+}
+
+function renderTTestSection(){
+  var sec=document.getElementById('ttestSection');
+  // Only groups that are visible on the graph AND have ≥2 files with data in window
+  var eligible=groups.filter(function(g){
+    if(!lineVis['group-'+g.id])return false;
+    return getGroupVals(g.id,ttMetric).length>=2;
+  });
+  if(eligible.length<2){sec.style.display='none';window._ttestRes=null;return;}
+  sec.style.display='block';
+  var ctrl=document.getElementById('ttCtrl');
+  var prevCtrl=ctrl.value;
+  ctrl.innerHTML=eligible.map(function(g){
+    return'<option value="'+g.id+'">'+esc(g.name)+'</option>';
+  }).join('');
+  if(prevCtrl&&eligible.find(function(g){return String(g.id)===prevCtrl}))ctrl.value=prevCtrl;
+  runTTest();
+}
+
+function runTTest(){
+  var ctrlVal=document.getElementById('ttCtrl').value;
+  var res=document.getElementById('ttestResult');
+  // Use string comparison for lookup — avoids parseInt/type coercion issues
+  var ctrlGroup=groups.find(function(g){return String(g.id)===String(ctrlVal)});
+  if(!ctrlGroup){window._ttestRes=null;return;}
+
+  // All other eligible visible groups become experimental.
+  // Use reference equality (g===ctrlGroup) — ctrlGroup is a direct pointer into groups[],
+  // so this is the most unambiguous possible exclusion.
+  var eligible=groups.filter(function(g){
+    if(g===ctrlGroup)return false;
+    if(!lineVis['group-'+g.id])return false;
+    return getGroupVals(g.id,ttMetric).length>=2;
+  });
+  if(!eligible.length){
+    res.innerHTML='<p style="font-size:12px;color:var(--warn-text);padding:8px 0">No other visible groups with sufficient data to compare against.</p>';
+    window._ttestRes=null;return;
+  }
+
+  var ctrlVals=getGroupVals(ctrlGroup.id,ttMetric);
+  if(ctrlVals.length<2){
+    res.innerHTML='<p style="font-size:12px;color:var(--warn-text);padding:8px 0">Control group needs at least 2 files with data in the current window.</p>';
+    window._ttestRes=null;return;
+  }
+
+  var metricLabel=ttMetric==='min'?'minimum':'maximum';
+  var ctrlMean=ctrlVals.reduce(function(a,b){return a+b},0)/ctrlVals.length;
+  var ctrlSD=Math.sqrt(ctrlVals.reduce(function(s,v){return s+(v-ctrlMean)*(v-ctrlMean)},0)/(ctrlVals.length-1));
+
+  // Control summary table
+  var h='<div class="stat-wrap" style="margin-bottom:8px"><table class="st"><thead><tr>'
+    +'<th>Control group</th><th>n (files)</th><th>Mean '+metricLabel+'</th><th>SD</th>'
+    +'</tr></thead><tbody>';
+  h+='<tr>'
+    +'<td style="font-weight:500">'+esc(ctrlGroup.name)+'</td>'
+    +'<td class="mn">'+ctrlVals.length+'</td>'
+    +'<td class="mn">'+ctrlMean.toFixed(6)+'</td>'
+    +'<td class="mn">'+ctrlSD.toFixed(6)+'</td>'
+    +'</tr></tbody></table></div>';
+
+  // Results table — one row per experimental group
+  h+='<div class="stat-wrap"><table class="st"><thead><tr>'
+    +'<th>Experimental group</th><th>n (files)</th>'
+    +'<th>Mean '+metricLabel+'</th><th>SD</th>'
+    +'<th>t-statistic</th><th>df</th><th>p-value (two-tailed)</th><th>Result at α = 0.05</th>'
+    +'</tr></thead><tbody>';
+
+  var allResults=[];
+  eligible.forEach(function(g){
+    var expVals=getGroupVals(g.id,ttMetric);
+    var r=welchT(ctrlVals,expVals);
+    if(!r){
+      h+='<tr><td style="font-weight:500">'+esc(g.name)+'</td>'
+        +'<td class="mn">'+expVals.length+'</td>'
+        +'<td class="mn" colspan="6" style="color:var(--warn-text)">Cannot compute (zero variance)</td></tr>';
+      return;
+    }
+    var sig=r.p<0.05;
+    var sigColor=sig?'var(--success-text)':'var(--danger-text)';
+    var sigLabel=sig?'✓ Significant':'✗ Not significant';
+    allResults.push({expName:g.name,r:r,sig:sig});
+    h+='<tr>'
+      +'<td style="font-weight:500">'+esc(g.name)+'</td>'
+      +'<td class="mn">'+r.nB+'</td>'
+      +'<td class="mn">'+r.meanB.toFixed(6)+'</td>'
+      +'<td class="mn">'+r.sdB.toFixed(6)+'</td>'
+      +'<td class="mn">'+r.t.toFixed(4)+'</td>'
+      +'<td class="mn">'+r.df.toFixed(2)+'</td>'
+      +'<td class="mn">'+r.p.toFixed(6)+'</td>'
+      +'<td><span style="font-weight:600;color:'+sigColor+'">'+sigLabel+'</span></td>'
+      +'</tr>';
+  });
+  h+='</tbody></table></div>';
+  res.innerHTML=h;
+  window._ttestRes={ctrlName:ctrlGroup.name,metric:ttMetric,
+                    ctrlMean:ctrlMean,ctrlSD:ctrlSD,ctrlN:ctrlVals.length,
+                    results:allResults};
+}
+
+/* ================================================================
+   SAVE GRAPH
+   ================================================================ */
+function saveGraph(mode){
+  // Build the series list according to mode
+  var vis=[];
+  if(mode==='visible'||mode==='files'){
+    files.forEach(function(f){
+      if(fileGroupMap[f.id]!==null)return; // grouped — skip for files/visible
+      if(mode==='visible'&&!lineVis['file-'+f.id])return;
+      vis.push({series:fileSeriesOf(f.id),color:FCOLS[f.id%FCOLS.length],thick:false,label:f.name});
+    });
+  }
+  if(mode==='visible'||mode==='groups'){
+    groups.forEach(function(g){
+      var members=files.filter(function(f){return fileGroupMap[f.id]===g.id});
+      if(!members.length)return;
+      if(mode==='visible'&&!lineVis['group-'+g.id])return;
+      vis.push({series:groupSeriesOf(g.id),color:GCOLS[g.id%GCOLS.length],thick:true,label:g.name});
+    });
+  }
+  if(!vis.length){showToast('No data to save.');return;}
+
+  // Layout constants
+  var W=1000;
+  var TITLE_H=44;
+  var SP={l:80,r:24,t:TITLE_H+24,b:52};
+  var PLOT_H=380;
+  var LEG_ITEM_W=180,LEG_ITEM_H=24,LEG_PAD=16;
+  var legsPerRow=Math.max(1,Math.floor((W-LEG_PAD*2)/LEG_ITEM_W));
+  var legRows=Math.ceil(vis.length/legsPerRow);
+  var LEG_H=legRows*LEG_ITEM_H+20;
+  var TOTAL_H=SP.t+PLOT_H+SP.b+LEG_H+16;
+
+  var c=document.createElement('canvas');
+  c.width=W;c.height=TOTAL_H;
+  var ctx=c.getContext('2d');
+
+  // White background
+  ctx.fillStyle='#ffffff';
+  ctx.fillRect(0,0,W,TOTAL_H);
+
+  var lC='rgba(0,0,0,0.55)';
+  var gC='rgba(0,0,0,0.07)';
+  var pw=W-SP.l-SP.r;
+  var ph=PLOT_H;
+
+  // Compute axis ranges from all series
+  var allT=[],allY=[];
+  vis.forEach(function(s){s.series.forEach(function(p){allT.push(p.time);allY.push(p.avg)})});
+  var xMin=Math.min.apply(null,allT),xMax=Math.max.apply(null,allT);if(xMin===xMax)xMax=xMin+1;
+  var yMin=Math.min.apply(null,allY),yMax=Math.max.apply(null,allY);if(yMin===yMax){yMin-=0.01;yMax+=0.01;}
+  var yPad=(yMax-yMin)*0.14,yLo=yMin-yPad,yHi=yMax+yPad;
+  var tx=function(v){return SP.l+((v-xMin)/(xMax-xMin))*pw};
+  var ty=function(v){return SP.t+ph-((v-yLo)/(yHi-yLo))*ph};
+
+  // Title
+  ctx.fillStyle='#111111';
+  ctx.font='bold 18px -apple-system,BlinkMacSystemFont,sans-serif';
+  ctx.textAlign='center';
+  ctx.fillText('Calcium Imaging Data',W/2,26);
+
+  // Grid and Y tick labels
+  ctx.lineWidth=0.5;
+  for(var i=0;i<=5;i++){
+    var yv=yLo+(yHi-yLo)*i/5,ypx=ty(yv);
+    ctx.strokeStyle=gC;ctx.beginPath();ctx.moveTo(SP.l,ypx);ctx.lineTo(W-SP.r,ypx);ctx.stroke();
+    ctx.fillStyle=lC;ctx.font='11px -apple-system,sans-serif';ctx.textAlign='right';
+    ctx.fillText(fmt(yv),SP.l-6,ypx+4);
+  }
+
+  // X tick labels
+  var ref0=vis[0].series;
+  var xStep=Math.max(1,Math.ceil(ref0.length/10));
+  ref0.forEach(function(p,idx){
+    if(idx%xStep!==0)return;
+    var xpx=tx(p.time);
+    ctx.strokeStyle=gC;ctx.lineWidth=0.5;ctx.beginPath();ctx.moveTo(xpx,SP.t);ctx.lineTo(xpx,SP.t+ph);ctx.stroke();
+    ctx.fillStyle=lC;ctx.font='11px -apple-system,sans-serif';ctx.textAlign='center';
+    ctx.fillText(fmt(p.time),xpx,SP.t+ph+16);
+  });
+
+  // Axis titles
+  ctx.fillStyle=lC;ctx.font='13px -apple-system,sans-serif';ctx.textAlign='center';
+  ctx.fillText('Time (s)',SP.l+pw/2,SP.t+ph+SP.b-6);
+  ctx.save();
+  ctx.translate(16,SP.t+ph/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillStyle=lC;ctx.font='13px -apple-system,sans-serif';ctx.textAlign='center';
+  ctx.fillText('Fluorescence (arb. units)',0,0);
+  ctx.restore();
+
+  // Window shading
+  var bLx=Math.max(SP.l,tx(boundL)),bRx=Math.min(W-SP.r,tx(boundR));
+  ctx.fillStyle='rgba(0,0,0,0.04)';
+  ctx.fillRect(bLx,SP.t,bRx-bLx,ph);
+
+  // Series lines
+  vis.forEach(function(s){
+    ctx.strokeStyle=s.color;ctx.lineWidth=s.thick?3:1.8;
+    ctx.setLineDash(s.thick?[7,4]:[]);
+    ctx.beginPath();var started=false;
+    s.series.forEach(function(p){
+      if(!started){ctx.moveTo(tx(p.time),ty(p.avg));started=true;}
+      else ctx.lineTo(tx(p.time),ty(p.avg));
+    });
+    ctx.stroke();ctx.setLineDash([]);
+    if(!s.thick){
+      s.series.forEach(function(p){
+        ctx.beginPath();ctx.arc(tx(p.time),ty(p.avg),3.5,0,Math.PI*2);
+        ctx.fillStyle=s.color;ctx.fill();
+        ctx.strokeStyle='#ffffff';ctx.lineWidth=1.2;ctx.stroke();
+      });
+    }
+  });
+
+  // Bound handles (no y-intercept labels)
+  drawBoundSave(ctx,tx(boundL),SP.t,ph,'#f59e0b','L',boundL,SP.t+ph);
+  drawBoundSave(ctx,tx(boundR),SP.t,ph,'#8b5cf6','R',boundR,SP.t+ph);
+
+  // Legend below x axis
+  var legTop=SP.t+ph+SP.b+4;
+  ctx.font='12px -apple-system,sans-serif';
+  vis.forEach(function(s,i){
+    var col=Math.floor(i%legsPerRow);
+    var row=Math.floor(i/legsPerRow);
+    var lx=LEG_PAD+col*LEG_ITEM_W;
+    var ly=legTop+row*LEG_ITEM_H;
+    // Swatch line
+    ctx.strokeStyle=s.color;ctx.lineWidth=s.thick?3:1.8;
+    ctx.setLineDash(s.thick?[6,3]:[]);
+    ctx.beginPath();ctx.moveTo(lx,ly+8);ctx.lineTo(lx+22,ly+8);ctx.stroke();
+    ctx.setLineDash([]);
+    if(!s.thick){
+      ctx.beginPath();ctx.arc(lx+11,ly+8,3,0,Math.PI*2);
+      ctx.fillStyle=s.color;ctx.fill();
+    }
+    // Label
+    ctx.fillStyle='#222222';ctx.textAlign='left';ctx.font=(s.thick?'600 ':'')+'12px -apple-system,sans-serif';
+    ctx.fillText(s.label,lx+28,ly+12);
+  });
+
+  // Download
+  var a=document.createElement('a');
+  a.download='acid_graph_'+mode+'.png';
+  a.href=c.toDataURL('image/png');
+  a.click();
+  showToast('✓ acid_graph_'+mode+'.png saved');
+}
+
+function drawBoundSave(ctx,x,top,ph,col,side,boundTime,axisBottom){
+  // Dashed vertical line
+  ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash([5,4]);
+  ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,top+ph);ctx.stroke();ctx.setLineDash([]);
+  // Handle tab
+  var hw=12,hh=16,hx=side==='L'?x:x-hw;
+  ctx.fillStyle=col;rrect(ctx,hx,top+ph/2-hh/2,hw,hh,3);ctx.fill();
+  ctx.fillStyle='#fff';ctx.font='bold 8px sans-serif';ctx.textAlign='center';
+  ctx.fillText(side==='L'?'▶':'◀',x+(side==='L'?hw/2:-hw/2),top+ph/2+3.5);
+  // X coordinate label just below the plot area
+  ctx.fillStyle=col;ctx.font='bold 10px -apple-system,sans-serif';ctx.textAlign='center';
+  ctx.fillText(fmt(boundTime),x,axisBottom+12);
+}
+
+/* ================================================================
+   NAVIGATION
+   ================================================================ */
+function go(n){
+  if(n===1){
+    if(!files.length){alert('Load files first.');return;}
+    document.getElementById('sb1').disabled=false;
+    renderConfigure();
+  }
+  if(n===2){
+    document.getElementById('sb2').disabled=false;
+    var others=files.filter(function(f){return f.id!==files[refIdx].id});
+    if(!others.length){go(3);return;}
+    renderAlign();
+  }
+  if(n===3){document.getElementById('sb3').disabled=false;initGrouping();}
+  if(n===4){
+    document.getElementById('sb4').disabled=false;
+    initLineVis();renderLegend();initBounds();setTimeout(redraw,60);
+  }
+  if(n===5){document.getElementById('sb5').disabled=false;renderStats();}
+  [0,1,2,3,4,5].forEach(function(i){
+    document.getElementById('p'+i).classList.toggle('active',i===n);
+    document.getElementById('sb'+i).classList.toggle('active',i===n);
+  });
+}
+
+function fmt(v){if(v==null||isNaN(v))return'—';var a=Math.abs(v);if(a===0)return'0';if(a<0.001||a>=100000)return v.toExponential(2);return parseFloat(v.toFixed(4)).toString()}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+document.addEventListener('DOMContentLoaded',function(){
+  var c=document.getElementById('dc');
+  c.addEventListener('mousedown',onDown);
+  c.addEventListener('mousemove',onMove);
+  c.addEventListener('mouseup',onUp);
+  c.addEventListener('mouseleave',onUp);
+  c.addEventListener('touchstart',onDown,{passive:false});
+  c.addEventListener('touchmove',onMove,{passive:false});
+  c.addEventListener('touchend',onUp);
+});
+window.addEventListener('resize',function(){
+  if(document.getElementById('p4').classList.contains('active'))redraw();
+});
+</script>
+</body>
+</html>
