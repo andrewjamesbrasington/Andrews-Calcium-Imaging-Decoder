@@ -1,13 +1,12 @@
 # ACID — Andrew's Calcium Imaging Decoder
 
-ACID is a desktop application for processing and analysing calcium imaging data. It is designed for researchers working with fluorescence recordings from multiple cells across multiple experimental conditions. Written with assistance from Claude AI.
+ACID is a desktop application for processing and analysing calcium imaging data. It is designed for researchers working with fluorescence recordings from multiple cells across multiple experimental conditions.
 
 ## Features
 
 - Load one or more CSV or LOG data files
 - Automatically detect and skip metadata rows, with manual correction available
 - Correct for reversed time ordering in files where data runs in descending order, assuming time is in the first column
-<<<<<<< HEAD
 - Select and configure which columns represent cells and which represents the background reference, which is applied to all files
 - Background-subtract fluorescence values row by row across all active cell columns
 - Align data start rows across files, with per-file confirmation
@@ -17,18 +16,6 @@ ACID is a desktop application for processing and analysing calcium imaging data.
 - Welch's two-tailed t-test (a=0.05) comparing group minimums or maximums against a user-selected control
 - Export statistics and t-test results to CSV
 - Save graph images to PNG
-=======
-- Select and configure which columns represent cells and which represents the background reference
-- The background column is assumed to be in the same position across all files
-- Background-subtract fluorescence values row by row across all active cell columns
-- Align data start rows across files, with per-file confirmation
-- Group files into experimental conditions for averaged traces
-- Interactive graph with draggable window bounds and per-series value readout
-- Calculate file and group statistics including min, max, and standard deviation
-- Welch's two-tailed t-test ( a=0.05) comparing group minimums or maximums against a user-selected control 
-- Export statistics and t-test results to CSV
-- Save graph images
->>>>>>> b1b47432e7876c9cba9f4933755acbab31670273
 
 ## Installation
 
@@ -41,7 +28,7 @@ Download the `.dmg` file for your Mac:
 
 Open the `.dmg`, drag ACID to your Applications folder, and launch it from there.
 
-> **Note:** On first launch macOS may say the app is from an unidentified developer. If so, go to **System Settings → Privacy & Security** and click **Open Anyway**.
+> **Note:** On first launch macOS may say the app is from an unidentified developer. If so, go to **System Settings → Privacy & Security** and click **Open Anyway**. If this option is not available, run xattr -cr /Applications/ACID.app in the terminal, then launch the app.
 
 ### Windows
 Download the `.exe` or `.msi` installer, run it, and follow the prompts.
