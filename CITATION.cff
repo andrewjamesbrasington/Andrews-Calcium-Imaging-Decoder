@@ -2,7 +2,7 @@ cff-version: 1.2.0
 title: "ACID — Andrew's Calcium Imaging Decoder"
 message: "If you use this software, please cite it as below."
 type: software
-version: 0.1.0
+version: 0.2.0
 date-released: 2026-03-18
 license: CC-BY-NC-4.0
 repository-code: https://github.com/andrewjamesbrasington/Andrews-Calcium-Imaging-Decoder

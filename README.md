@@ -4,7 +4,7 @@ ACID is a desktop application for processing and analysing calcium imaging data.
 
 ## Features
 
-- Load one or more CSV or LOG data files
+- Load one or more CSV or LOG ratiometric calcium imaging data files produced by MetaFluor 
 - Automatically detect and skip metadata rows, with manual correction available
 - Correct for reversed time ordering in files where data runs in descending order, assuming time is in the first column
 - Select and configure which columns represent cells and which represents the background reference, which is applied to all files
