@@ -1,6 +1,6 @@
-# ACID — Andrew's Calcium Imaging Decoder
+# ACID — Andrew's Calcium Imaging Decoder for Analyzing Calcium Imaging Data
 
-ACID is a desktop application for processing and analysing calcium imaging data. It is designed for researchers working with fluorescence recordings from multiple cells across multiple experimental conditions.
+ACID is a desktop application for processing and analysing calcium imaging data. It is designed for researchers working with fluorescence recordings from ratiometric calcium imaging experiments.
 
 ## Features
 
