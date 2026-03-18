@@ -173,6 +173,10 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
 .anova-comp-item{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;user-select:none;padding:3px 0}
 .anova-comp-item input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:var(--info-text);flex-shrink:0}
 .anova-m-note{font-size:11px;color:var(--text2);padding:6px 10px;background:var(--bg2);border-radius:var(--r);margin-bottom:12px;border:0.5px solid var(--border)}
+/* Outlier flag badge shown next to constituent file rows in the stats table */
+.outlier-badge{padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:var(--warn-bg);color:var(--warn-text);margin-left:6px;flex-shrink:0}
+/* Warning banner shown at the top of the stats panel when the window is narrow */
+.warn-banner{padding:8px 12px;border-radius:var(--r);background:var(--warn-bg);color:var(--warn-text);font-size:12px;margin-bottom:12px;border:0.5px solid var(--warn-text)}
 </style>
 </head>
 <body>
@@ -218,7 +222,7 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
     <p style="font-size:12px;color:var(--text2);margin-bottom:8px">
       <strong>Toggle cells:</strong> click a column header or the chips below to include/exclude.
       <strong>Change data start:</strong> click any row in the grid.
-      Time and Background are fixed.
+      The <strong>background column</strong> defaults to the final column — click <em>Set background column</em> to reassign it. Time and Background columns are otherwise fixed.
     </p>
     <div class="cell-toggles" id="cellToggles"></div>
     <div class="grid-scroll" id="confGrid"></div>
@@ -255,6 +259,7 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
     <div class="frow" style="margin-top:1.5rem">
       <button class="btn btn-p" onclick="go(4)">Continue to graph →</button>
       <button class="btn" onclick="go(2)">← Back</button>
+      <button class="btn" id="undoGrpBtn" onclick="undoGrouping()" disabled title="Undo the last grouping change">↩ Undo</button>
       <span id="grpStatus" style="font-size:12px;color:var(--text3)"></span>
     </div>
   </div>
@@ -268,7 +273,8 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
       <div class="avg-chip" id="avgChip">— s</div>
     </div>
     <div class="chart-outer"><canvas id="dc" height="400"></canvas></div>
-    <p class="hint">Drag the <span style="color:#f59e0b;font-weight:500">amber</span> and <span style="color:#8b5cf6;font-weight:500">purple</span> bounds to define the averaging window. Click legend items to toggle visibility. X axis = seconds from data start (0, 1, 2 ...). All values are background-subtracted.</p>
+    <div id="graphWarnBanner" class="warn-banner" style="display:none"></div>
+    <p class="hint">Drag the <span style="color:#f59e0b;font-weight:500">amber</span> and <span style="color:#8b5cf6;font-weight:500">purple</span> bounds to define the averaging window. Click legend items to toggle visibility. All values are background-subtracted.</p>
     <div class="frow">
       <button class="btn btn-p" onclick="go(5)">Compute statistics →</button>
       <button class="btn" onclick="go(3)">← Back</button>
@@ -293,7 +299,7 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
             <div class="ttest-metric">
               <button class="metric-btn active" id="mbMin" onclick="setTMetric('min')">Compare minimums</button>
               <button class="metric-btn" id="mbMax" onclick="setTMetric('max')">Compare maximums</button>
-              <div class="save-group" style="margin-left:auto"><input class="fname-input" id="fnTTest" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn btn-sm" onclick="dlTestCSVNamed('fnTTest')">↓ Save test CSV</button></div>
+              <div class="save-group" style="margin-left:auto"><input class="fname-input" id="fnTTest" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn btn-p btn-sm" onclick="dlTestCSVNamed('fnTTest')">↓ Save test CSV</button></div>
             </div>
             <div id="ttestResult"></div>
           </div>
@@ -307,7 +313,7 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
             <div class="ttest-metric">
               <button class="metric-btn active" id="abMin" onclick="setTMetric('min')">Compare minimums</button>
               <button class="metric-btn" id="abMax" onclick="setTMetric('max')">Compare maximums</button>
-              <div class="save-group" style="margin-left:auto"><input class="fname-input" id="fnAnova" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn btn-sm" onclick="dlTestCSVNamed('fnAnova')">↓ Save test CSV</button></div>
+              <div class="save-group" style="margin-left:auto"><input class="fname-input" id="fnAnova" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn btn-p btn-sm" onclick="dlTestCSVNamed('fnAnova')">↓ Save test CSV</button></div>
             </div>
             <div class="ttest-selrow">
               <div><label>Control group</label><select id="anovaCtrl" onchange="buildAnovaComparisons()"></select></div>
@@ -318,9 +324,16 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
         </div>
       </div>
     </div>
-    <div id="statContent"></div>
+    <div class="ttest-box" style="margin-top:1.5rem">
+      <div class="ttest-hdr">Summary Statistics</div>
+      <div class="ttest-body">
+        <div id="statContent"></div>
+        <div class="frow" style="margin-top:1rem">
+          <div class="save-group"><input class="fname-input" id="fnCSV" type="text" placeholder="File name (required)" title="Enter a file name, then download"><button class="btn btn-p" onclick="dlCSVNamed('fnCSV')">↓ Save Summary Statistics</button></div>
+        </div>
+      </div>
+    </div>
     <div class="frow" style="margin-top:1rem">
-      <div class="save-group"><input class="fname-input" id="fnCSV" type="text" placeholder="File name (required)" title="Enter a file name, then download"><button class="btn btn-p" onclick="dlCSVNamed('fnCSV')">↓ Download CSV</button></div>
       <button class="btn" onclick="go(4)">← Back to graph</button>
     </div>
   </div>
@@ -352,6 +365,9 @@ var boundL=null, boundR=null, // left/right time bounds of the averaging window 
 var _seriesCache={}; // fid -> {series, stamp} — memoized background-subtracted series per file
 var _cacheStamp=0;   // bumped whenever data changes; stale cache entries are ignored
 var graphFmt='png';  // current graph save format: 'png' or 'svg'
+var _groupSnap=null;    // snapshot of grouping state for undo/redo toggle — alternates between
+                        // the pre-action state (when button shows "Undo") and the post-undo state
+                        // (when button shows "Redo"); a new user action always resets redo.
 
 // Color palettes — file lines use FCOLS (lighter), group average lines use GCOLS (darker)
 var FCOLS=['#378ADD','#1D9E75','#D85A30','#D4537E','#7F77DD','#BA7517','#E24B4A','#639922','#0891B2','#CA8A04'];
@@ -850,6 +866,7 @@ function refreshGrouping(){
 
 // Toggles a file's group assignment: clicking the same group button again un-assigns the file
 function assignFile(fid,gid){
+  saveGroupSnap();
   // Toggle: if already in this group, remove; otherwise assign
   if(fileGroupMap[fid]===gid)fileGroupMap[fid]=null;
   else fileGroupMap[fid]=gid;
@@ -860,12 +877,14 @@ function assignFile(fid,gid){
 function addGroup(){
   var inp=document.getElementById('grpNameInput');
   var name=inp.value.trim();if(!name){inp.focus();return;}
+  saveGroupSnap();
   var g={id:groupIdCtr++,name:name,fileIds:[]};
   groups.push(g);lineVis['group-'+g.id]=true;
   inp.value='';refreshGrouping();
 }
 // Deletes a group, un-assigns all its files, and removes its lineVis entry
 function removeGroup(gid){
+  saveGroupSnap();
   // Unassign any files in this group
   Object.keys(fileGroupMap).forEach(function(fid){
     if(fileGroupMap[fid]===gid)fileGroupMap[fid]=null;
@@ -875,7 +894,58 @@ function removeGroup(gid){
   refreshGrouping();
 }
 // Updates a group's display name in-place as the user types
-function renameGroup(gid,n){var g=groups.find(function(x){return x.id===gid});if(g)g.name=n;refreshGrouping();}
+function renameGroup(gid,n){
+  saveGroupSnap();
+  var g=groups.find(function(x){return x.id===gid});if(g)g.name=n;refreshGrouping();
+}
+
+// Captures a deep-copy snapshot of the current grouping state into _groupSnap before any
+// mutating action (assignFile, addGroup, removeGroup, renameGroup).
+// A new user action clears any pending redo by resetting the button back to "↩ Undo".
+function saveGroupSnap(){
+  _groupSnap={
+    groups:JSON.parse(JSON.stringify(groups)),
+    fileGroupMap:Object.assign({},fileGroupMap),
+    groupIdCtr:groupIdCtr
+  };
+  // Mark the button as an undo (not redo) since the user just made a new change
+  var btn=document.getElementById('undoGrpBtn');
+  if(btn){btn.disabled=false;btn.textContent='↩ Undo';}
+}
+
+// Single handler for both undo and redo — the button toggles between the two labels.
+//
+// The trick is that _groupSnap always holds "the other state": when the button says
+// "Undo", _groupSnap is the pre-action state; after clicking, current state goes into
+// _groupSnap and the pre-action state is restored, so now _groupSnap holds what was
+// just undone — making the next click a redo. This continues to toggle indefinitely.
+//
+// A new user action (assignFile etc.) always calls saveGroupSnap(), which overwrites
+// _groupSnap with the pre-action state and resets the label to "↩ Undo", ending the
+// redo chain.
+function undoGrouping(){
+  if(!_groupSnap)return;
+  var btn=document.getElementById('undoGrpBtn');
+  var isUndo=!btn||btn.textContent.indexOf('Undo')>=0;
+
+  // Swap: save current state into _groupSnap, restore what was in _groupSnap
+  var prev=_groupSnap;
+  _groupSnap={
+    groups:JSON.parse(JSON.stringify(groups)),
+    fileGroupMap:Object.assign({},fileGroupMap),
+    groupIdCtr:groupIdCtr
+  };
+  groups=prev.groups;
+  fileGroupMap=prev.fileGroupMap;
+  groupIdCtr=prev.groupIdCtr;
+  // Rebuild lineVis entries for any groups that don't yet have a visibility entry
+  groups.forEach(function(g){if(lineVis['group-'+g.id]===undefined)lineVis['group-'+g.id]=true;});
+
+  // Flip the button label so the next click does the opposite action
+  if(btn){btn.textContent=isUndo?'↻ Redo':'↩ Undo';}
+  refreshGrouping();
+  showToast(isUndo?'Grouping undone':'Grouping redone');
+}
 
 // Updates the status text beneath the Groups panel ("3 files in groups, 2 ungrouped")
 function updateGrpStatus(){
@@ -1094,6 +1164,24 @@ function redraw(){
   drawBound(ctx,tx(boundL),PAD.t,ph,'#f59e0b','L',boundL,vis,ty);
   drawBound(ctx,tx(boundR),PAD.t,ph,'#8b5cf6','R',boundR,vis,ty);
   updateReadout();
+  updateGraphWarn(vis);
+}
+
+// Shows or hides the narrow-window warning banner on the Graph panel.
+// Mirrors the same <3-points-in-window check used in renderStats(), so the user
+// sees the flag as soon as they drag a bound, not only after navigating to Stats.
+function updateGraphWarn(vis){
+  var banner=document.getElementById('graphWarnBanner');
+  if(!banner)return;
+  if(!vis||!vis.length||boundL===null||boundR===null){banner.style.display='none';return;}
+  var thin=vis.filter(function(s){
+    return s.series.filter(function(p){return p.time>=boundL&&p.time<=boundR}).length<3;
+  });
+  if(!thin.length){banner.style.display='none';return;}
+  var names=thin.map(function(s){return esc(s.label)}).join(', ');
+  banner.textContent='⚠ Narrow window: '+names+(thin.length===1?' has':' have')
+    +' fewer than 3 data points in the current window. Min and max values may be unreliable — consider widening the window.';
+  banner.style.display='block';
 }
 
 // Draws one draggable bound handle: a dashed vertical line, a coloured tab with an arrow,
@@ -1213,6 +1301,24 @@ function ssd(arr){
   return Math.sqrt(arr.map(function(v){return(v-mean)*(v-mean)}).reduce(function(a,b){return a+b},0)/(arr.length-1));
 }
 
+// Identifies outliers within an array of per-file values using the 2 SD rule:
+// a value is flagged if it deviates from the group mean by more than 2 sample SDs.
+//
+//   flag_i = | xᵢ − x̄ | > 2 · s
+//
+// where x̄ is the arithmetic mean and s is the sample SD of the group values.
+// Returns a Set of array indices that are outliers. Returns an empty Set if
+// the group has fewer than 3 values (2 SD flagging is unreliable with n < 3).
+function flagOutliers(vals){
+  var flagged=new Set();
+  if(vals.length<3)return flagged;
+  var mean=vals.reduce(function(a,b){return a+b},0)/vals.length;
+  var sd=ssd(vals);
+  if(sd===0)return flagged;
+  vals.forEach(function(v,i){if(Math.abs(v-mean)>2*sd)flagged.add(i);});
+  return flagged;
+}
+
 // Computes stats for every visible file and group within [boundL, boundR].
 // Returns an array of row objects used by both renderStats() and dlCSV().
 // Group rows include cross-file SD of min and max; file rows within a group carry a groupLabel.
@@ -1298,13 +1404,34 @@ function computeStats(){
 // Renders the Stats panel: a window summary header, a table of ungrouped files,
 // then a section per group (group-average row + constituent file rows).
 // Also stores results in window._statsRes for CSV export and triggers the t-test section.
+// Includes:
+//   • A warning banner when any visible series has fewer than 3 points in the window
+//     (min/max values become unreliable with very few observations)
+//   • Outlier badges (⚠ >2 SD) next to constituent file rows whose min or max
+//     deviates from the group mean by more than 2 sample SDs — flags only, does
+//     not exclude the value from any calculation
 function renderStats(){
   var res=computeStats();
   if(!res.length){
     document.getElementById('statContent').innerHTML='<p style="color:var(--text3);font-size:13px">No visible data within the current window.</p>';
     return;
   }
-  var h='<p style="font-size:12px;color:var(--text2);margin-bottom:12px">'
+
+  // ── Minimum-window-points warning ───────────────────────────────────────
+  // Collect the n-points-in-window for every row (file and group average lines).
+  // Warn if any series has fewer than 3 points; 1–2 points make min === max and
+  // give misleading statistics.
+  var thinSeries=res.filter(function(r){return r.n<3});
+  var h='';
+  if(thinSeries.length){
+    var names=thinSeries.map(function(r){return esc(r.label)}).join(', ');
+    h+='<div class="warn-banner">⚠ Narrow window: <strong>'
+      +names+'</strong> '+(thinSeries.length===1?'has':'have')
+      +' fewer than 3 data points in the current window. '
+      +'Min and max values may be unreliable — consider widening the window.</div>';
+  }
+
+  h+='<p style="font-size:12px;color:var(--text2);margin-bottom:12px">'
     +'Window <strong>'+fmt(boundL)+' — '+fmt(boundR)+'</strong> s</p>';
 
   var groupRows=res.filter(function(r){return r.type==='group'});
@@ -1327,7 +1454,7 @@ function renderStats(){
     h+='</tbody></table></div>';
   }
 
-  // Visible groups — summary row then constituent files
+  // Visible groups — summary row then constituent files with outlier flagging
   if(groupRows.length){
     groupRows.forEach(function(g){
       h+='<p style="font-size:12px;font-weight:500;color:var(--text2);margin-top:1rem;margin-bottom:6px">'
@@ -1347,18 +1474,25 @@ function renderStats(){
         +'<td class="mn">'+g.max.toFixed(6)+'</td>'
         +'<td class="mn">'+g.sdMax.toFixed(6)+'</td>'
         +'</tr></tbody></table></div>';
-      // Constituent files
+      // Constituent files — flag per-file mins and maxs that are >2 SD from group mean
       var members=res.filter(function(r){return r.type==='file'&&r.groupLabel===g.label});
       if(members.length){
+        // Compute outlier sets independently for min and max across all member values
+        var memberMins=members.map(function(r){return r.min});
+        var memberMaxs=members.map(function(r){return r.max});
+        var outlierMin=flagOutliers(memberMins); // Set of indices with |min − mean_min| > 2·SD
+        var outlierMax=flagOutliers(memberMaxs); // Set of indices with |max − mean_max| > 2·SD
         h+='<div class="stat-wrap"><table class="st"><thead><tr>'
           +'<th>Constituent file</th><th>Points in window</th><th>Min</th><th>Max</th>'
           +'</tr></thead><tbody>';
-        members.forEach(function(r){
+        members.forEach(function(r,idx){
+          var minFlag=outlierMin.has(idx)?'<span class="outlier-badge" title="More than 2 SD from group mean min">⚠ &gt;2 SD</span>':'';
+          var maxFlag=outlierMax.has(idx)?'<span class="outlier-badge" title="More than 2 SD from group mean max">⚠ &gt;2 SD</span>':'';
           h+='<tr>'
             +'<td style="color:var(--text2)"><span class="dot8" style="background:'+r.color+';display:inline-block;margin-right:7px;vertical-align:middle"></span>'+esc(r.label)+'</td>'
             +'<td class="mn">'+r.n+'</td>'
-            +'<td class="mn">'+r.min.toFixed(6)+'</td>'
-            +'<td class="mn">'+r.max.toFixed(6)+'</td>'
+            +'<td class="mn">'+r.min.toFixed(6)+minFlag+'</td>'
+            +'<td class="mn">'+r.max.toFixed(6)+maxFlag+'</td>'
             +'</tr>';
         });
         h+='</tbody></table></div>';
@@ -2161,11 +2295,11 @@ function saveGraph(mode, name){
   var tx=function(v){return SP.l+((v-xMin)/(xMax-xMin))*pw};
   var ty=function(v){return SP.t+ph-((v-yLo)/(yHi-yLo))*ph};
 
-  // Title
+  // Title — uses the user-supplied filename so the saved figure is self-labelled
   ctx.fillStyle='#111111';
   ctx.font='bold 18px -apple-system,BlinkMacSystemFont,sans-serif';
   ctx.textAlign='center';
-  ctx.fillText('Calcium Imaging Data',W/2,26);
+  ctx.fillText(name||'Calcium Imaging Data',W/2,26);
 
   // Grid and Y tick labels
   ctx.lineWidth=0.5;
@@ -2320,10 +2454,10 @@ function saveGraphSVG(mode,name){
   // Clip path — constrains series lines to the plot rectangle, preventing overflow
   els.push('<defs><clipPath id="pc"><rect x="'+SP.l+'" y="'+SP.t+'" width="'+pw+'" height="'+ph+'"/></clipPath></defs>');
 
-  // Title
+  // Title — uses the user-supplied filename so the saved figure is self-labelled
   els.push('<text x="'+(W/2)+'" y="26" text-anchor="middle" '
     +'font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="18" font-weight="bold" fill="#111111">'
-    +'Calcium Imaging Data</text>');
+    +xe(name||'Calcium Imaging Data')+'</text>');
 
   // Y grid lines and tick labels (6 evenly-spaced ticks from yLo to yHi)
   for(var i=0;i<=5;i++){
