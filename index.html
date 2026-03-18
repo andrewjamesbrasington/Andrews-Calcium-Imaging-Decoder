@@ -266,7 +266,7 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
   <div class="panel" id="p5">
     <div id="ttestSection" style="display:none">
       <div class="ttest-box">
-        <div class="ttest-hdr">Two-sample t-tests — Welch's, two-tailed, α = 0.05</div>
+        <div class="ttest-hdr">Two-sample t-tests — Welch's, two-tailed, alpha = 0.05</div>
         <div class="ttest-body">
           <div class="ttest-selrow">
             <div><label>Control group</label><select id="ttCtrl" onchange="runTTest()"></select></div>
@@ -288,6 +288,7 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
 </div>
 <div class="toast" id="toast"></div>
 <script>
+// Briefly shows a success/info message at the bottom of the screen, then fades it out after 2.8 s
 function showToast(msg){
   var t=document.getElementById('toast');
   t.textContent=msg;t.classList.add('show');
@@ -295,32 +296,38 @@ function showToast(msg){
 }
 
 /* ================================================================
-   STATE
+   STATE — single source of truth for all app data
    ================================================================ */
-var files        = [];   // [{id,name,rawRows,dataStart,numCols,headers}]
-var refIdx       = 0;
-var excludedCells= new Set();  // col indices of Cell columns to exclude
-var bgColIdx     = 0;          // which column is the background reference
-var selectingBg  = false;      // true while user is picking a new bg column
-var groups       = [];
-var fileGroupMap = {};  // fileId -> groupId | null
-var groupIdCtr   = 0;
-var lineVis      = {};
-var boundL=null, boundR=null, dragBound=null, chartMeta=null;
-var _seriesCache={}; // fid -> {series, stamp}
-var _cacheStamp=0;  // increment to invalidate all cache entries
+var files        = [];   // [{id,name,rawRows,dataStart,numCols,headers}] — all loaded files
+var refIdx       = 0;    // index into `files` for the reference/configure file
+var excludedCells= new Set();  // col indices of Cell columns the user has toggled off
+var bgColIdx     = 0;          // which column is the background reference (subtracted from all cells)
+var selectingBg  = false;      // true while the user is in "pick background column" mode
+var groups       = [];         // [{id, name}] — user-defined averaging groups
+var fileGroupMap = {};         // fileId -> groupId | null — maps each file to its group (or none)
+var groupIdCtr   = 0;          // auto-increment counter for new group IDs
+var lineVis      = {};         // 'file-N' / 'group-N' -> bool — controls graph legend visibility
+var boundL=null, boundR=null, // left/right time bounds of the averaging window (seconds)
+    dragBound=null,           // which handle is currently being dragged ('L', 'R', or null)
+    chartMeta=null;           // last-drawn chart's coordinate mapping, used for hit-testing drags
+var _seriesCache={}; // fid -> {series, stamp} — memoized background-subtracted series per file
+var _cacheStamp=0;   // bumped whenever data changes; stale cache entries are ignored
 
+// Color palettes — file lines use FCOLS (lighter), group average lines use GCOLS (darker)
 var FCOLS=['#378ADD','#1D9E75','#D85A30','#D4537E','#7F77DD','#BA7517','#E24B4A','#639922','#0891B2','#CA8A04'];
 var GCOLS=['#0F4C75','#145A32','#7B241C','#4A235A','#0E4D4D','#784212','#1B2631','#4D0013'];
 
 /* ================================================================
-   PARSING — auto-detect data start row
+   PARSING — auto-detect delimiter and data start row
    ================================================================ */
+// Counts occurrences of each candidate delimiter and returns the most common one
 function detectDelim(txt) {
   var c={',':(txt.match(/,/g)||[]).length,'\t':(txt.match(/\t/g)||[]).length,'|':(txt.match(/\|/g)||[]).length,';':(txt.match(/;/g)||[]).length};
   return Object.entries(c).sort(function(a,b){return b[1]-a[1]})[0][0];
 }
 
+// Parses raw file text into rows; auto-detects the first all-numeric row as the data start;
+// also detects and optionally reverses files where time runs backwards (descending)
 function parseLog(txt) {
   var lines=txt.trim().split(/\r?\n/).filter(function(l){return l.trim()});
   if(!lines.length)return null;
@@ -354,6 +361,8 @@ function parseLog(txt) {
   return{rawRows:allRows,dataStart:dataStart,numCols:numCols,headers:buildHeaders(numCols),timeReversed:timeReversed};
 }
 
+// Builds a simple default header list: Time, Cell 1 … Cell N-2, Background
+// (only used at initial load; getHeaders() is the live version below)
 function buildHeaders(n){
   var h=['Time'];
   for(var i=1;i<n-1;i++)h.push('Cell '+i);
@@ -361,9 +370,9 @@ function buildHeaders(n){
   return h;
 }
 
+// Generates display headers dynamically, accounting for the current bgColIdx position:
+// column 0 → "Time", bgColIdx → "Background", all others → "Cell 1", "Cell 2", …
 function getHeaders(numCols){
-  // Generate headers dynamically so background column always reads "Background"
-  // and cell columns are numbered sequentially skipping the bg position
   var h=[];
   var cellNum=1;
   for(var i=0;i<numCols;i++){
@@ -375,11 +384,14 @@ function getHeaders(numCols){
 }
 
 /* ================================================================
-   FILE LOADING
+   FILE LOADING — read files via FileReader API, parse, then finalize
    ================================================================ */
+// Triggered by the hidden <input type="file"> element
 function handleFileInput(inp){processFiles(Array.from(inp.files));}
+// Triggered by drag-and-drop onto the drop zone
 function dropFiles(e){e.preventDefault();processFiles(Array.from(e.dataTransfer.files));}
 
+// Reads all selected files asynchronously; collects results and calls finishLoad once all are done
 function processFiles(arr){
   if(!arr.length)return;
   var pending=arr.length,results=[];
@@ -394,6 +406,8 @@ function processFiles(arr){
   });
 }
 
+// Called once every file has been read; sorts results back into original order,
+// resets all app state, sets reference file (index 1 if >1 file), and renders the file card list
 function finishLoad(results){
   results.sort(function(a,b){return a.idx-b.idx});
   files=results.map(function(r,i){
@@ -413,6 +427,7 @@ function finishLoad(results){
   document.getElementById('loadErr').textContent='';
 }
 
+// Renders a colour-coded card for each loaded file on the Load panel
 function renderFileCards(){
   document.getElementById('fileCards').innerHTML=files.map(function(f){
     return'<div class="file-card">'
@@ -425,8 +440,10 @@ function renderFileCards(){
 }
 
 /* ================================================================
-   STAGE 1: Configure
+   STAGE 1: Configure — lets the user choose which columns to include
+             and where the data starts, using the reference file
    ================================================================ */
+// Rebuilds the entire Configure panel: detect bar, column toggle chips, and the data grid
 function renderConfigure(){
   var f=files[refIdx];
   var nCells=f.numCols-2;
@@ -465,6 +482,9 @@ function renderConfigure(){
   }
 }
 
+// Builds the scrollable HTML table for the Configure panel.
+// Columns are colour-coded (Time=amber, Background=purple, Cell=blue/strikethrough if excluded).
+// Rows above dataStart are shown as a single italic preview cell; clicking any row sets it as the new start.
 function buildConfGrid(f){
   var html='<table class="sg"><thead><tr><th class="th-rn">#</th>';
   var hdrs=getHeaders(f.numCols);
@@ -501,11 +521,13 @@ function buildConfGrid(f){
   return html+'</tbody></table>';
 }
 
+// Enters/exits "select background column" mode (highlights all non-time columns as clickable targets)
 function toggleBgSelect(){
   selectingBg=!selectingBg;
   renderConfigure();
 }
 
+// Sets the chosen column as the background reference; ensures it can't simultaneously be excluded
 function setBgCol(ci){
   bgColIdx=ci;
   excludedCells.delete(ci);
@@ -514,6 +536,7 @@ function setBgCol(ci){
   renderConfigure();
 }
 
+// Toggles a Cell column in/out of the excluded set (excluded columns are dimmed and not analysed)
 function toggleCell(ci){
   if(excludedCells.has(ci))excludedCells.delete(ci);
   else excludedCells.add(ci);
@@ -521,6 +544,8 @@ function toggleCell(ci){
   renderConfigure();
 }
 
+// Sets the data-start row for the reference file and propagates the same change to any other
+// files that previously shared the old start row (keeps everything aligned by default)
 function setDataStart(ri){
   var oldStart=files[refIdx].dataStart;
   files[refIdx].dataStart=ri;
@@ -534,8 +559,11 @@ function setDataStart(ri){
 }
 
 /* ================================================================
-   STAGE 2: Align
+   STAGE 2: Align — review and correct the data-start row for each
+             non-reference file; supports time-reversal correction
    ================================================================ */
+// Renders collapsible accordion items for each non-reference file showing its data-start
+// status relative to the reference, with optional reversal/confirm controls
 function renderAlign(){
   var ref=files[refIdx];
   var others=files.filter(function(f){return f.id!==ref.id});
@@ -572,6 +600,8 @@ function renderAlign(){
   }).join('');
 }
 
+// Builds the scrollable data-preview table for a single file in the Align panel.
+// Row clicks are disabled once a file is confirmed.
 function buildAlignGrid(f){
   var locked=f.confirmed;
   var html='<table class="sg"><thead><tr><th class="th-rn">#</th>';
@@ -599,12 +629,15 @@ function buildAlignGrid(f){
   return html+'</tbody></table>';
 }
 
+// Expands or collapses a file's accordion row in the Align panel
 function toggleAItem(fid){
   var body=document.getElementById('aib-'+fid);
   var chev=document.getElementById('chev-'+fid);
   if(body){body.classList.toggle('open');if(chev)chev.classList.toggle('open');}
 }
 
+// Locks or unlocks a file's data-start row. When confirmed, row clicks and the reversal
+// button are disabled; the status badge switches to "✓ user confirmed"
 function toggleConfirm(fid){
   var f=files.find(function(x){return x.id===fid});
   if(!f)return;
@@ -644,6 +677,8 @@ function toggleConfirm(fid){
   if(grid)grid.innerHTML=buildAlignGrid(f);
 }
 
+// Sets the data-start row for one specific file in the Align panel (does not propagate
+// to other files — unlike setDataStart which syncs files sharing the same old start row)
 function setAlignStart(fid,ri){
   var f=files.find(function(x){return x.id===fid});
   if(!f||f.confirmed)return;
@@ -667,6 +702,8 @@ function setAlignStart(fid,ri){
   }
 }
 
+// Flips the row order of the data section to correct files where time runs in descending order.
+// Metadata rows above dataStart are kept in place; only the data rows are reversed.
 function toggleReversal(fid){
   var f=files.find(function(x){return x.id===fid});
   if(!f||f.confirmed)return;
@@ -701,6 +738,11 @@ function toggleReversal(fid){
 // fileGroupMap: fileId -> groupId or null
 var fileGroupMap = {};
 
+/* ================================================================
+   STAGE 3: Grouping — optionally assign files to named groups;
+             grouped files are averaged together on the graph
+   ================================================================ */
+// Ensures every file has a lineVis entry and a fileGroupMap entry before rendering the panel
 function initGrouping(){
   files.forEach(function(f){
     if(lineVis['file-'+f.id]===undefined)lineVis['file-'+f.id]=true;
@@ -709,6 +751,8 @@ function initGrouping(){
   refreshGrouping();
 }
 
+// Re-renders the entire Groups panel: a file list with per-group assignment buttons,
+// plus a summary card for each group showing its name (editable) and member files
 function refreshGrouping(){
   var area=document.getElementById('groupArea');
   if(!area)return;
@@ -764,6 +808,7 @@ function refreshGrouping(){
   updateGrpStatus();
 }
 
+// Toggles a file's group assignment: clicking the same group button again un-assigns the file
 function assignFile(fid,gid){
   // Toggle: if already in this group, remove; otherwise assign
   if(fileGroupMap[fid]===gid)fileGroupMap[fid]=null;
@@ -771,6 +816,7 @@ function assignFile(fid,gid){
   refreshGrouping();
 }
 
+// Creates a new group from the name input, adds it to the groups array, and refreshes the UI
 function addGroup(){
   var inp=document.getElementById('grpNameInput');
   var name=inp.value.trim();if(!name){inp.focus();return;}
@@ -778,6 +824,7 @@ function addGroup(){
   groups.push(g);lineVis['group-'+g.id]=true;
   inp.value='';refreshGrouping();
 }
+// Deletes a group, un-assigns all its files, and removes its lineVis entry
 function removeGroup(gid){
   // Unassign any files in this group
   Object.keys(fileGroupMap).forEach(function(fid){
@@ -787,8 +834,10 @@ function removeGroup(gid){
   delete lineVis['group-'+gid];
   refreshGrouping();
 }
+// Updates a group's display name in-place as the user types
 function renameGroup(gid,n){var g=groups.find(function(x){return x.id===gid});if(g)g.name=n;refreshGrouping();}
 
+// Updates the status text beneath the Groups panel ("3 files in groups, 2 ungrouped")
 function updateGrpStatus(){
   var nGrouped=files.filter(function(f){return fileGroupMap[f.id]!==null}).length;
   var nUngrouped=files.length-nGrouped;
@@ -797,11 +846,26 @@ function updateGrpStatus(){
   document.getElementById('grpStatus').textContent=s;
 }
 
+// Bumps the cache stamp so all memoized series are recomputed on next access
 function invalidateSeriesCache(){_cacheStamp++;}
 
 /* ================================================================
    SERIES — background subtracted, row-by-row
+   Background fluorescence is subtracted from each included Cell column
+   at every time point; the per-row average across included cells is stored.
+   Results are memoized by file ID and a cache stamp.
    ================================================================ */
+// Returns (or recomputes) the background-subtracted, per-row-averaged time series for one file.
+// time is set to the 1-based row index (seconds from data start).
+//
+// For each data row i the value stored is:
+//
+//   value_i = ( Σ_j ( cell_j[i] − background[i] ) ) / n_included_cells
+//
+// where j ranges over all included (non-excluded, non-background, non-time) columns.
+// background[i] is subtracted independently at every row, so slow drift in the
+// background channel is removed point-by-point rather than as a global offset.
+// Rows where the background cell or all included cells are non-numeric are dropped.
 function fileSeriesOf(fid){
   var entry=_seriesCache[fid];
   if(entry&&entry.stamp===_cacheStamp)return entry.series;
@@ -821,6 +885,17 @@ function fileSeriesOf(fid){
   return series;
 }
 
+// Builds the group-average series: collects all time points across member files,
+// groups points by time, and returns the mean value at each time step.
+//
+// For each time point t shared by one or more member files:
+//
+//   group_avg(t) = ( Σ_f value_f(t) ) / n_files_with_data_at_t
+//
+// This is a straight arithmetic mean of the per-file values (which are themselves
+// already per-row cell means after background subtraction — see fileSeriesOf).
+// Files that have no data row at a given t are excluded from that time point's mean,
+// so unequal-length files do not bias the group average at any shared time point.
 function groupSeriesOf(gid){
   // Collect all files assigned to this group via fileGroupMap
   var memberIds=files.filter(function(f){return fileGroupMap[f.id]===gid}).map(function(f){return f.id});
@@ -839,22 +914,32 @@ function groupSeriesOf(gid){
 }
 
 /* ================================================================
-   STAGE 4: Graph
+   STAGE 4: Graph — canvas-based fluorescence plot with draggable
+             averaging-window bounds and click-to-toggle legend
    ================================================================ */
+// Inner padding (px) around the plot area: left leaves room for Y-axis labels
 var PAD={l:72,r:20,t:20,b:46};
 
+// Sets boundL and boundR to the full time range of all loaded series, but only on first
+// entry to the graph stage (i.e. when both are still null). Subsequent calls — such as
+// returning from the Stats panel — are no-ops, preserving wherever the user left the handles.
+// bounds are reset to null in finishLoad() when a new set of files is loaded.
 function initBounds(){
+  if(boundL!==null&&boundR!==null)return;
   var all=[];
   files.forEach(function(f){fileSeriesOf(f.id).forEach(function(p){all.push(p.time)})});
   if(!all.length)return;
   boundL=Math.min.apply(null,all);boundR=Math.max.apply(null,all);
 }
 
+// Ensures every file and group has a visibility entry (default: visible); safe to call repeatedly
 function initLineVis(){
   files.forEach(function(f){if(lineVis['file-'+f.id]===undefined)lineVis['file-'+f.id]=true});
   groups.forEach(function(g){if(lineVis['group-'+g.id]===undefined)lineVis['group-'+g.id]=true});
 }
 
+// Builds the clickable colour-swatch legend above the chart.
+// Ungrouped files get thin solid lines; groups get thick dashed lines with a member-count badge.
 function renderLegend(){
   var h='';
   // Ungrouped files as individual lines
@@ -879,8 +964,11 @@ function renderLegend(){
   document.getElementById('legend').innerHTML=h;
 }
 
+// Flips a line's visibility in lineVis then re-renders the legend and redraws the chart
 function toggleLine(k){lineVis[k]=!lineVis[k];renderLegend();redraw();}
 
+// Main canvas draw routine: clears the canvas, computes axis ranges, draws grid lines,
+// axis labels, the averaging-window shading, each visible series, and the draggable bound handles
 function redraw(){
   var canvas=document.getElementById('dc');if(!canvas)return;
   var W=canvas.offsetWidth||800;canvas.width=W;canvas.height=400;
@@ -968,6 +1056,8 @@ function redraw(){
   updateReadout();
 }
 
+// Draws one draggable bound handle: a dashed vertical line, a coloured tab with an arrow,
+// and floating value labels showing each visible series' fluorescence at that time point
 function drawBound(ctx,x,top,ph,col,side,boundTime,vis,ty){
   ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash([5,4]);
   ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,top+ph);ctx.stroke();ctx.setLineDash([]);
@@ -1001,12 +1091,15 @@ function drawBound(ctx,x,top,ph,col,side,boundTime,vis,ty){
     ctx.fillText(fmt(lb.val),lx+5,ly+labelH-3.5);
   });
 }
+// Canvas helper: draws a rounded rectangle path (does not stroke/fill — caller does that)
 function rrect(ctx,x,y,w,h,r){
   ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
   ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);
   ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
 }
 
+// Handles manual typing into the bound input fields; clamps the value to the chart's x-range
+// and enforces a minimum 1-second gap between the two bounds before redrawing
 function setBoundFromInput(side,el){
   var v=parseFloat(el.value);
   if(isNaN(v))return;
@@ -1020,6 +1113,7 @@ function setBoundFromInput(side,el){
   redraw();
 }
 
+// Syncs the two numeric bound inputs and the "N s window" chip to the current boundL/boundR values
 function updateReadout(){
   document.getElementById('b0val').value=fmt(boundL);
   document.getElementById('b1val').value=fmt(boundR);
@@ -1027,22 +1121,27 @@ function updateReadout(){
   document.getElementById('avgChip').textContent=(dur>=0?dur:0)+' s window';
 }
 
+// Returns 'L', 'R', or null — whichever bound handle is within 16 px of the mouse x-position
 function nearBound(mx){
   if(!chartMeta)return null;
   var dL=Math.abs(chartMeta.tx(boundL)-mx),dR=Math.abs(chartMeta.tx(boundR)-mx),thresh=16;
   if(dL<thresh&&dL<=dR)return'L';if(dR<thresh)return'R';return null;
 }
+// Converts a canvas pixel x-coordinate to the nearest integer time value (clamped to x-range)
 function xToTime(mx){
   if(!chartMeta)return 0;
   var t=chartMeta.xMin+(chartMeta.xMax-chartMeta.xMin)*((mx-PAD.l)/chartMeta.pw);
   t=Math.round(Math.max(chartMeta.xMin,Math.min(chartMeta.xMax,t)));
   return t;
 }
+// Extracts the canvas-relative x position from either a mouse or touch event
 function cxy(e){
   var r=document.getElementById('dc').getBoundingClientRect();
   var s=e.touches?e.touches[0]:e;return{mx:s.clientX-r.left};
 }
+// Starts dragging a bound handle if the pointer lands within the hit-threshold
 function onDown(e){var p=cxy(e);var b=nearBound(p.mx);if(b){dragBound=b;e.preventDefault();}}
+// Updates the cursor and, while dragging, moves the active bound and redraws the chart
 function onMove(e){
   if(!chartMeta)return;var p=cxy(e);
   if(!dragBound){document.getElementById('dc').style.cursor=nearBound(p.mx)?'ew-resize':'default';return;}
@@ -1054,18 +1153,42 @@ function onMove(e){
   boundL=newL;boundR=newR;
   redraw();
 }
+// Releases the active drag and resets the cursor
 function onUp(){dragBound=null;var c=document.getElementById('dc');if(c)c.style.cursor='default';}
 
 /* ================================================================
-   STAGE 5: Stats
+   STAGE 5: Stats — computes min/max statistics within the averaging
+             window and renders summary tables for files and groups
    ================================================================ */
-function psd(arr){
-  // Population standard deviation
+// Sample standard deviation of an array of per-file scalars (cross-file spread of min or max).
+//
+//   s = sqrt( Σᵢ (xᵢ − x̄)² / (N − 1) )
+//
+// Divides by N−1 (Bessel's correction), producing an unbiased estimate of the population SD.
+// Files in a group are biological replicates — a sample from a larger possible population —
+// so N−1 is appropriate here and is consistent with the sample variance used in welchT below.
+function ssd(arr){
   if(arr.length<2)return 0;
   var mean=arr.reduce(function(a,b){return a+b},0)/arr.length;
-  return Math.sqrt(arr.map(function(v){return(v-mean)*(v-mean)}).reduce(function(a,b){return a+b},0)/arr.length);
+  return Math.sqrt(arr.map(function(v){return(v-mean)*(v-mean)}).reduce(function(a,b){return a+b},0)/(arr.length-1));
 }
 
+// Computes stats for every visible file and group within [boundL, boundR].
+// Returns an array of row objects used by both renderStats() and dlCSV().
+// Group rows include cross-file SD of min and max; file rows within a group carry a groupLabel.
+//
+// The values being min/max-ed are the background-subtracted per-row cell means produced
+// by fileSeriesOf() — i.e. for each time point t in the window:
+//
+//   window_vals = { value_i : boundL ≤ time_i ≤ boundR }
+//   min = min( window_vals )      ← most negative / least fluorescent point in the window
+//   max = max( window_vals )      ← peak fluorescence point in the window
+//
+// For a group the same min/max are computed on the group-average series (groupSeriesOf).
+// Additionally, the per-file mins and maxs are collected and their sample SD (÷N−1) is
+// reported as sdMin / sdMax, quantifying how much the files in the group varied from
+// each other at their respective extremes. Sample SD is used here (consistent with welchT)
+// because group files are replicates sampled from a larger population, not the full population.
 function computeStats(){
   var out=[];
 
@@ -1112,8 +1235,8 @@ function computeStats(){
       n:gvals.length,
       min:Math.min.apply(null,gvals),
       max:Math.max.apply(null,gvals),
-      sdMin:psd(mins),
-      sdMax:psd(maxs),
+      sdMin:ssd(mins),
+      sdMax:ssd(maxs),
       nMembers:memberStats.length
     });
 
@@ -1132,6 +1255,9 @@ function computeStats(){
   return out;
 }
 
+// Renders the Stats panel: a window summary header, a table of ungrouped files,
+// then a section per group (group-average row + constituent file rows).
+// Also stores results in window._statsRes for CSV export and triggers the t-test section.
 function renderStats(){
   var res=computeStats();
   if(!res.length){
@@ -1170,7 +1296,7 @@ function renderStats(){
       // Group average row
       h+='<div class="stat-wrap" style="margin-bottom:8px"><table class="st"><thead><tr>'
         +'<th>Group average</th><th>Files</th><th>Points in window</th>'
-        +'<th>Avg min</th><th>SD (min)</th><th>Avg max</th><th>SD (max)</th>'
+        +'<th>Avg min</th><th>Sample SD (min)</th><th>Avg max</th><th>Sample SD (max)</th>'
         +'</tr></thead><tbody>';
       h+='<tr>'
         +'<td style="font-weight:500"><span class="dot8" style="background:'+g.color+';display:inline-block;margin-right:7px;vertical-align:middle"></span>'+esc(g.label)+'</td>'
@@ -1205,6 +1331,23 @@ function renderStats(){
   renderTTestSection();
 }
 
+// Serialises the current stats results (and t-test results if present) to a CSV blob
+// and triggers a browser download as "acid_stats.csv".
+//
+// Column meanings in the exported CSV:
+//   Individual files:  min, max            — window min/max of background-subtracted per-row cell mean
+//   Group summary:     avg_min             — group-average-series min within window
+//                      sample_sd_min       — sample SD (÷N−1) of per-file mins within window
+//                      avg_max             — group-average-series max within window
+//                      sample_sd_max       — sample SD (÷N−1) of per-file maxs within window
+//   T-test rows:       mean_min/max        — arithmetic mean of per-file scalars for that group
+//                      sample_sd_min/max   — sample SD (÷N−1) as reported by welchT
+//                      t_statistic         — Welch's t = (x̄_ctrl − x̄_exp) / SE
+//                      degrees_of_freedom  — Welch-Satterthwaite df (non-integer in general)
+//                      p_value_two_tailed  — p = I_{df/(df+t²)}(df/2, 1/2)
+//
+// All SD values in this file use sample SD (÷N−1). Group files are biological replicates
+// (a sample from a larger population), so Bessel's correction is appropriate throughout.
 function dlCSV(){
   if(!window._statsRes)return;
   var res=window._statsRes;
@@ -1230,7 +1373,7 @@ function dlCSV(){
   groupRows.forEach(function(g){
     lines.push('');
     lines.push('=== Group: '+g.label+' ===');
-    lines.push('group,member_files,points_in_window,avg_min,sd_min,avg_max,sd_max');
+    lines.push('group,member_files,points_in_window,avg_min,sample_sd_min,avg_max,sample_sd_max');
     lines.push(['"'+g.label+'"',g.nMembers,g.n,g.min.toFixed(6),g.sdMin.toFixed(6),g.max.toFixed(6),g.sdMax.toFixed(6)].join(','));
     lines.push('');
     lines.push('constituent_file,points_in_window,min,max');
@@ -1244,14 +1387,14 @@ function dlCSV(){
   if(window._ttestRes){
     var tr=window._ttestRes;
     lines.push('');
-    lines.push('=== Two-Sample t-Tests (Welch\'s, two-tailed, α = 0.05) ===');
+    lines.push('=== Two-Sample t-Tests (Welch\'s two-tailed alpha = 0.05) ===');
     lines.push('# Metric compared: '+tr.metric+'imum');
     lines.push('# Control group: '+tr.ctrlName);
     lines.push('');
-    lines.push('control_group,n_files,mean_'+tr.metric+',sd_'+tr.metric);
+    lines.push('control_group,n_files,mean_'+tr.metric+',sample_sd_'+tr.metric);
     lines.push(['"'+tr.ctrlName+'"',tr.ctrlN,tr.ctrlMean.toFixed(6),tr.ctrlSD.toFixed(6)].join(','));
     lines.push('');
-    lines.push('experimental_group,n_files,mean_'+tr.metric+',sd_'+tr.metric+',t_statistic,degrees_of_freedom,p_value_two_tailed,significant_at_0.05');
+    lines.push('experimental_group,n_files,mean_'+tr.metric+',sample_sd_'+tr.metric+',t_statistic,degrees_of_freedom,p_value_two_tailed,significant_at_0.05');
     tr.results.forEach(function(row){
       var r=row.r;
       lines.push(['"'+row.expName+'"',r.nB,r.meanB.toFixed(6),r.sdB.toFixed(6),
@@ -1267,9 +1410,12 @@ function dlCSV(){
 
 /* ================================================================
    T-TEST (Welch's, two-tailed, α = 0.05)
+   Pure-JS implementation of the regularised incomplete beta function
+   is used to compute exact p-values without any external library.
    ================================================================ */
-var ttMetric='min';
+var ttMetric='min'; // which metric to compare: 'min' or 'max' fluorescence within the window
 
+// Log-gamma function (Lanczos approximation) — needed by betai() to compute p-values
 function lgamma(x){
   var c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,
          771.32342877765313,-176.61502916214059,12.507343278686905,
@@ -1281,6 +1427,8 @@ function lgamma(x){
   return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a);
 }
 
+// Continued-fraction evaluation of the incomplete beta function (Lentz's method)
+// — internal helper called by betai(); MAXIT caps iteration depth for convergence
 function betacf(a,b,x){
   var MAXIT=200,EPS=3e-7,FPMIN=1e-30;
   var qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap;
@@ -1301,6 +1449,8 @@ function betacf(a,b,x){
   return h;
 }
 
+// Regularised incomplete beta function I_x(a,b) — returns a value in [0,1].
+// Uses symmetry relation when x > (a+1)/(a+b+2) for better numerical stability.
 function betai(a,b,x){
   if(x<=0)return 0;if(x>=1)return 1;
   var front=Math.exp(a*Math.log(x)+b*Math.log(1-x)-lgamma(a)-lgamma(b)+lgamma(a+b));
@@ -1308,12 +1458,42 @@ function betai(a,b,x){
   return 1-front*betacf(b,a,1-x)/b;
 }
 
+// Returns the two-tailed p-value for a t-statistic with the given degrees of freedom,
+// computed via the regularised incomplete beta function.
+//
+// The two-tailed p-value of a t-distribution with ν degrees of freedom is:
+//
+//   p = I_x( ν/2, 1/2 )    where  x = ν / (ν + t²)
+//
+// This is a standard identity (Abramowitz & Stegun 26.7.8). The substitution x = ν/(ν+t²)
+// maps the t-statistic to the [0,1] domain of betai, and the result is directly the
+// two-tailed probability — no factor of 2 is needed because the identity already accounts
+// for both tails via the symmetry of the t-distribution. Always called with |t| (see welchT).
 function tpval(t,df){
-  // Two-tailed p-value via regularized incomplete beta function
   var x=df/(df+t*t);
   return betai(df/2,0.5,x);
 }
 
+// Welch's two-sample t-test: computes t-statistic, Welch-Satterthwaite degrees of freedom,
+// and two-tailed p-value. Returns null if either group has fewer than 2 values or zero variance.
+//
+// Sample means and variances (sample variance divides by n−1):
+//   x̄_A = Σ a_i / n_A        s²_A = Σ(a_i − x̄_A)² / (n_A − 1)
+//   x̄_B = Σ b_i / n_B        s²_B = Σ(b_i − x̄_B)² / (n_B − 1)
+//
+// Standard error of the difference of means:
+//   SE = sqrt( s²_A/n_A + s²_B/n_B )
+//
+// t-statistic (control A minus experimental B, so positive t means A > B):
+//   t = (x̄_A − x̄_B) / SE
+//
+// Welch-Satterthwaite effective degrees of freedom:
+//   df = (s²_A/n_A + s²_B/n_B)²
+//        ─────────────────────────────────────────────
+//        (s²_A/n_A)²/(n_A−1)  +  (s²_B/n_B)²/(n_B−1)
+//
+// Two-tailed p-value is then obtained via tpval(|t|, df) — see that function.
+// A and B correspond to the control and experimental groups respectively.
 function welchT(a,b){
   var na=a.length,nb=b.length;
   if(na<2||nb<2)return null;
@@ -1330,6 +1510,7 @@ function welchT(a,b){
          sdA:Math.sqrt(vA),sdB:Math.sqrt(vB),nA:na,nB:nb};
 }
 
+// Switches the t-test metric between 'min' and 'max', updates the active button, and reruns the test
 function setTMetric(m){
   ttMetric=m;
   document.getElementById('mbMin').classList.toggle('active',m==='min');
@@ -1337,6 +1518,15 @@ function setTMetric(m){
   runTTest();
 }
 
+// Returns one min or max value per member file of a group, filtered to points within the
+// averaging window — these per-file scalars are the inputs to the t-test.
+//
+// Each scalar is:
+//   min  →  min{ value_i : boundL ≤ time_i ≤ boundR }  for that file
+//   max  →  max{ value_i : boundL ≤ time_i ≤ boundR }  for that file
+//
+// The resulting array has one entry per file, so its length equals the group's n
+// (the sample size used in welchT below).
 function getGroupVals(gid,metric){
   var members=files.filter(function(f){return fileGroupMap[f.id]===gid});
   return members.map(function(f){
@@ -1348,6 +1538,8 @@ function getGroupVals(gid,metric){
   }).filter(function(v){return v!==null});
 }
 
+// Shows or hides the t-test section based on whether at least 2 eligible visible groups
+// (each with ≥2 files that have data in the window) exist; rebuilds the control-group dropdown
 function renderTTestSection(){
   var sec=document.getElementById('ttestSection');
   // Only groups that are visible on the graph AND have ≥2 files with data in window
@@ -1366,6 +1558,8 @@ function renderTTestSection(){
   runTTest();
 }
 
+// Runs Welch's t-test comparing every eligible experimental group against the selected control.
+// Renders a control-summary table and a results table, and stores results in window._ttestRes for CSV export.
 function runTTest(){
   var ctrlVal=document.getElementById('ttCtrl').value;
   var res=document.getElementById('ttestResult');
@@ -1447,10 +1641,14 @@ function runTTest(){
 }
 
 /* ================================================================
-   SAVE GRAPH
+   SAVE GRAPH — renders a high-resolution, white-background PNG with
+   a title, full legend, and bound markers, then triggers a download
    ================================================================ */
+// Builds a 1000 px-wide off-screen canvas matching the chosen mode:
+//   'visible' — only currently visible lines
+//   'groups'  — all group average lines (visible or hidden)
+//   'files'   — all ungrouped individual file lines (visible or hidden)
 function saveGraph(mode){
-  // Build the series list according to mode
   var vis=[];
   if(mode==='visible'||mode==='files'){
     files.forEach(function(f){
@@ -1498,7 +1696,17 @@ function saveGraph(mode){
   vis.forEach(function(s){s.series.forEach(function(p){allT.push(p.time);allY.push(p.avg)})});
   var xMin=Math.min.apply(null,allT),xMax=Math.max.apply(null,allT);if(xMin===xMax)xMax=xMin+1;
   var yMin=Math.min.apply(null,allY),yMax=Math.max.apply(null,allY);if(yMin===yMax){yMin-=0.01;yMax+=0.01;}
+  // Y axis is padded by 14 % of the raw data span on both sides to provide visual headroom:
+  //   yPad = (yMax − yMin) × 0.14
+  //   yLo  = yMin − yPad
+  //   yHi  = yMax + yPad
   var yPad=(yMax-yMin)*0.14,yLo=yMin-yPad,yHi=yMax+yPad;
+  // Linear transforms from data coordinates to canvas pixel coordinates.
+  // tx maps time values onto the horizontal pixel axis (left-to-right):
+  //   tx(v) = SP.l + (v − xMin) / (xMax − xMin) × pw
+  // ty maps fluorescence values onto the vertical pixel axis (bottom-to-top,
+  // hence the ph subtraction to flip the canvas's top-down y convention):
+  //   ty(v) = SP.t + ph − (v − yLo) / (yHi − yLo) × ph
   var tx=function(v){return SP.l+((v-xMin)/(xMax-xMin))*pw};
   var ty=function(v){return SP.t+ph-((v-yLo)/(yHi-yLo))*ph};
 
@@ -1596,6 +1804,8 @@ function saveGraph(mode){
   showToast('✓ acid_graph_'+mode+'.png saved');
 }
 
+// Draws a bound handle into the off-screen save canvas (no floating series-value labels —
+// only the dashed line, coloured tab, and the time value printed just below the plot area)
 function drawBoundSave(ctx,x,top,ph,col,side,boundTime,axisBottom){
   // Dashed vertical line
   ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash([5,4]);
@@ -1611,8 +1821,10 @@ function drawBoundSave(ctx,x,top,ph,col,side,boundTime,axisBottom){
 }
 
 /* ================================================================
-   NAVIGATION
+   NAVIGATION — single entry-point for moving between the 6 panels
    ================================================================ */
+// Activates panel n (0–5): guards against skipping required steps, triggers per-stage
+// initialisation (renderConfigure, renderAlign, initGrouping, etc.), and updates the stage bar
 function go(n){
   if(n===1){
     if(!files.length){alert('Load files first.');return;}
@@ -1637,19 +1849,28 @@ function go(n){
   });
 }
 
+// Formats a number for display: uses exponential notation for very small/large values,
+// otherwise trims trailing zeros up to 4 decimal places; returns "—" for null/NaN
 function fmt(v){if(v==null||isNaN(v))return'—';var a=Math.abs(v);if(a===0)return'0';if(a<0.001||a>=100000)return v.toExponential(2);return parseFloat(v.toFixed(4)).toString()}
+// Escapes HTML special characters to prevent XSS when injecting user-supplied strings into innerHTML
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 
+// Attach mouse and touch drag handlers to the chart canvas once the DOM is ready.
+// touchstart/touchmove are marked non-passive so preventDefault() can suppress page scrolling
+// while the user drags a bound handle on a touchscreen.
 document.addEventListener('DOMContentLoaded',function(){
   var c=document.getElementById('dc');
   c.addEventListener('mousedown',onDown);
   c.addEventListener('mousemove',onMove);
   c.addEventListener('mouseup',onUp);
-  c.addEventListener('mouseleave',onUp);
+  c.addEventListener('mouseleave',onUp);  // treat leaving the canvas as releasing the drag
   c.addEventListener('touchstart',onDown,{passive:false});
   c.addEventListener('touchmove',onMove,{passive:false});
   c.addEventListener('touchend',onUp);
 });
+
+// Redraws the chart whenever the browser window is resized, but only if the graph
+// panel (p4) is currently visible — avoids unnecessary work on other stages.
 window.addEventListener('resize',function(){
   if(document.getElementById('p4').classList.contains('active'))redraw();
 });
