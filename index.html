@@ -147,6 +147,14 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
 .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(12px);background:var(--success-bg);color:var(--success-text);border:0.5px solid var(--success-text);border-radius:var(--r);padding:9px 20px;font-size:13px;font-weight:500;opacity:0;pointer-events:none;transition:opacity 0.2s,transform 0.2s;z-index:999}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+/* Save-with-name groups */
+.save-group{display:flex;gap:4px;align-items:center}
+.fname-input{font-size:12px;padding:5px 9px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);width:155px;outline:none;transition:border-color .15s,background .15s}
+.fname-input::placeholder{color:var(--text3)}
+.fname-input:focus{border-color:var(--info-text)}
+.fname-input.invalid{border-color:var(--danger-text)!important;background:var(--danger-bg)!important;animation:fname-shake .25s ease}
+@keyframes fname-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}60%{transform:translateX(5px)}}
+
 /* T-Test */
 .ttest-box{margin-top:1.5rem;border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden}
 .ttest-hdr{padding:10px 14px;background:var(--bg2);border-bottom:0.5px solid var(--border);font-size:12px;font-weight:600;color:var(--text2);letter-spacing:0.01em}
@@ -256,9 +264,9 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
     <div class="frow">
       <button class="btn btn-p" onclick="go(5)">Compute statistics →</button>
       <button class="btn" onclick="go(3)">← Back</button>
-      <button class="btn" onclick="saveGraph('visible')" title="Save all currently visible lines">↓ Save visible</button>
-      <button class="btn" onclick="saveGraph('groups')" title="Save all group lines (visible and hidden)">↓ Save all groups</button>
-      <button class="btn" onclick="saveGraph('files')" title="Save all individual file lines (visible and hidden)">↓ Save all files</button>
+      <div class="save-group"><input class="fname-input" id="fnVisible" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn" onclick="saveGraphNamed('visible','fnVisible')" title="Save all currently visible lines">↓ Save visible</button></div>
+      <div class="save-group"><input class="fname-input" id="fnGroups" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn" onclick="saveGraphNamed('groups','fnGroups')" title="Save all group lines (visible and hidden)">↓ Save all groups</button></div>
+      <div class="save-group"><input class="fname-input" id="fnFiles" type="text" placeholder="File name (required)" title="Enter a file name, then save"><button class="btn" onclick="saveGraphNamed('files','fnFiles')" title="Save all individual file lines (visible and hidden)">↓ Save all files</button></div>
     </div>
   </div>
 
@@ -281,7 +289,7 @@ table.st td.mn{font-family:'SF Mono',Menlo,monospace;font-size:11px}
     </div>
     <div id="statContent"></div>
     <div class="frow" style="margin-top:1rem">
-      <button class="btn btn-p" onclick="dlCSV()">↓ Download CSV</button>
+      <div class="save-group"><input class="fname-input" id="fnCSV" type="text" placeholder="File name (required)" title="Enter a file name, then download"><button class="btn btn-p" onclick="dlCSVNamed('fnCSV')">↓ Download CSV</button></div>
       <button class="btn" onclick="go(4)">← Back to graph</button>
     </div>
   </div>
@@ -1348,7 +1356,7 @@ function renderStats(){
 //
 // All SD values in this file use sample SD (÷N−1). Group files are biological replicates
 // (a sample from a larger population), so Bessel's correction is appropriate throughout.
-function dlCSV(){
+function dlCSV(name){
   if(!window._statsRes)return;
   var res=window._statsRes;
   var lines=[
@@ -1403,8 +1411,8 @@ function dlCSV(){
   }
 
   var b=new Blob([lines.join('\n')],{type:'text/csv'});
-  var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='acid_stats.csv';a.click();
-  showToast('✓ acid_stats.csv exported successfully');
+  var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(name||'acid_stats')+'.csv';a.click();
+  showToast('✓ '+(name||'acid_stats')+'.csv exported successfully');
 }
 
 
@@ -1641,6 +1649,34 @@ function runTTest(){
 }
 
 /* ================================================================
+   SAVE HELPERS — validate the filename input, then delegate to the
+   underlying save function; shake + highlight the field if empty
+   ================================================================ */
+function _requireName(inputId){
+  var inp=document.getElementById(inputId);
+  var val=inp.value.trim();
+  if(!val){
+    inp.classList.remove('invalid');
+    void inp.offsetWidth; // force reflow so animation restarts
+    inp.classList.add('invalid');
+    inp.focus();
+    setTimeout(function(){inp.classList.remove('invalid');},1000);
+    return null;
+  }
+  return val;
+}
+function saveGraphNamed(mode,inputId){
+  var name=_requireName(inputId);
+  if(!name)return;
+  saveGraph(mode,name);
+}
+function dlCSVNamed(inputId){
+  var name=_requireName(inputId);
+  if(!name)return;
+  dlCSV(name);
+}
+
+/* ================================================================
    SAVE GRAPH — renders a high-resolution, white-background PNG with
    a title, full legend, and bound markers, then triggers a download
    ================================================================ */
@@ -1648,7 +1684,7 @@ function runTTest(){
 //   'visible' — only currently visible lines
 //   'groups'  — all group average lines (visible or hidden)
 //   'files'   — all ungrouped individual file lines (visible or hidden)
-function saveGraph(mode){
+function saveGraph(mode, name){
   var vis=[];
   if(mode==='visible'||mode==='files'){
     files.forEach(function(f){
@@ -1798,10 +1834,10 @@ function saveGraph(mode){
 
   // Download
   var a=document.createElement('a');
-  a.download='acid_graph_'+mode+'.png';
+  a.download=(name||('acid_graph_'+mode))+'.png';
   a.href=c.toDataURL('image/png');
   a.click();
-  showToast('✓ acid_graph_'+mode+'.png saved');
+  showToast('✓ '+(name||('acid_graph_'+mode))+'.png saved');
 }
 
 // Draws a bound handle into the off-screen save canvas (no floating series-value labels —
