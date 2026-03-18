@@ -1,8 +1,8 @@
 # A Calcium Imaging Decoder (ACID)
 
 ![Build](https://github.com/andrewjamesbrasington/Andrews-Calcium-Imaging-Decoder/actions/workflows/build.yml/badge.svg)
-![Release](https://img.shields.io/https://github.com/andrewjamesbrasington/Andrews-Calcium-Imaging-Decoder/releases)
-![License](https://img.shields.io/https://github.com/andrewjamesbrasington/Andrews-Calcium-Imaging-Decoder/blob/main/LICENSE)
+![Release](https://img.shields.io/github/v/release/andrewjamesbrasington/Andrews-Calcium-Imaging-Decoder)
+![License](https://img.shields.io/github/license/andrewjamesbrasington/Andrews-Calcium-Imaging-Decoder)
 
 ACID is a browser-based application for processing and analysing ratiometric calcium imaging data. It is designed for researchers working with fluorescence recordings produced by MetaFluor, and can be installed and run on most operating systems.
 
