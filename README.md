@@ -28,7 +28,8 @@ Download the `.dmg` file for your Mac:
 
 Open the `.dmg`, drag ACID to your Applications folder, and launch it from there.
 
-> **Note:** On first launch macOS may say the app is from an unidentified developer. If so, go to **System Settings → Privacy & Security** and click **Open Anyway**. If this option is not available, copy and paste `xattr -cr /Applications/ACID.app` in the terminal, hit the enter key, then launch the app.
+> **Note:** On first launch macOS may say the app is from an unidentified developer. If so, go to **System Settings → Privacy & Security** and click **Open Anyway**. 
+> - If this option is not available, copy and paste `xattr -cr /Applications/ACID.app` in the terminal, hit the enter key, then launch the app.
 
 ### Windows
 Download the `.exe` or `.msi` installer, run it, and follow the prompts.
