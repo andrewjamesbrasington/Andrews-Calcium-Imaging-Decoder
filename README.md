@@ -1,21 +1,33 @@
-# ACID — Andrew's Calcium Imaging Decoder for Analyzing Calcium Imaging Data
+# A Calcium Imaging Decoder (ACID)
 
-ACID is a desktop application for processing and analysing calcium imaging data. It is designed for researchers working with fluorescence recordings from ratiometric calcium imaging experiments.
+ACID is a browser-based application for processing and analysing ratiometric calcium imaging data. It is designed for researchers working with fluorescence recordings produced by MetaFluor, and can be installed and run on most operating systems.
 
 ## Features
 
-- Load one or more CSV or LOG ratiometric calcium imaging data files produced by MetaFluor 
-- Automatically detect and skip metadata rows, with manual correction available
-- Correct for reversed time ordering in files where data runs in descending order, assuming time is in the first column
-- Select and configure which columns represent cells and which represents the background reference, which is applied to all files
-- Background-subtract fluorescence values row by row across all active cell columns
-- Align data start rows across files, with per-file confirmation
-- Group files into experimental conditions for averaged traces
-- Interactive graph with draggable window bounds, per-series value readout, and discrete time snapping
-- Calculate statistics including min, max, and standard deviation per group
-- Welch's two-tailed t-test (a=0.05) comparing group minimums or maximums against a user-selected control
-- Export statistics and t-test results to CSV
-- Save graph images to PNG
+### Data loading and configuration
+- Load one or more CSV or LOG files produced by MetaFluor
+- Automatically detect and skip metadata rows, with manual correction available per file
+- Detect and correct reversed time ordering where data runs in descending order
+- Configure which columns represent cells; the background reference column defaults to the final column and can be reassigned by the user
+- Toggle individual cell columns in or out of analysis, which applies analysis wide.
+- Automatically background-subtract fluorescence values row by row across all active cell columns before data visualization and analysis
+
+### Data Alignment and grouping
+- Automatically detect data start rows across all loaded files, with per-file manual correction
+- Assign files to named experimental groups for averaged traces and performing statistical tests
+- Undo and redo grouping changes
+
+### Data Visualisation
+- Interactive canvas-based graph with draggable averaging-window bounds
+- Per-series floating value readout at each bound handle
+- Click-to-toggle legend for individual files and group averages
+- Export graph images as PNG or SVG, with the filename used as the figure title
+
+### Statistics and Analysis
+- Compute min, max, and sample standard deviation per group within the averaging window
+- **Two-sample Welch's t-test** (two-tailed, α = 0.05) when exactly two eligible groups are visible, comparing minimums or maximums against a user-selected control; reports Cohen's *d* with interpretation
+- **Welch's one-way ANOVA** with Bonferroni post-hoc pairwise comparisons when three or more eligible groups are visible; reports ω² (omega-squared) as the omnibus effect size and Cohen's *d* for each selected comparison; Bonferroni correction uses only the comparisons selected by the user
+- Export summary statistics and statistical test results to CSV as separate files
 
 ## Installation
 
