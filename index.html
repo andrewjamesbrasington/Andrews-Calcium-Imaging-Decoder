@@ -2331,10 +2331,7 @@ function saveGraph(mode, name){
   ctx.fillText('Fluorescence (arb. units)',0,0);
   ctx.restore();
 
-  // Window shading
-  var bLx=Math.max(SP.l,tx(boundL)),bRx=Math.min(W-SP.r,tx(boundR));
-  ctx.fillStyle='rgba(0,0,0,0.04)';
-  ctx.fillRect(bLx,SP.t,bRx-bLx,ph);
+
 
   // Series lines
   vis.forEach(function(s){
@@ -2485,9 +2482,7 @@ function saveGraphSVG(mode,name){
   els.push('<text transform="translate(16,'+(SP.t+ph/2)+') rotate(-90)" text-anchor="middle" '
     +'font-family="-apple-system,sans-serif" font-size="13" fill="'+lC+'">Fluorescence (arb. units)</text>');
 
-  // Averaging-window shading (same subtle grey rectangle as on-screen and in PNG)
-  var bLx=Math.max(SP.l,tx(boundL)),bRx=Math.min(W-SP.r,tx(boundR));
-  els.push('<rect x="'+bLx+'" y="'+SP.t+'" width="'+(bRx-bLx)+'" height="'+ph+'" fill="rgba(0,0,0,0.04)"/>');
+
 
   // Series lines and dots — all clipped to plot area via clip-path="url(#pc)"
   vis.forEach(function(s){
