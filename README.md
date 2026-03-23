@@ -13,7 +13,7 @@ ACID is a browser-based application for processing and analysing ratiometric cal
 - Automatically detect and skip metadata rows, with manual correction available per file
 - Detect and correct reversed time ordering where data runs in descending order
 - Configure which columns represent cells; the background reference column defaults to the final column and can be reassigned by the user
-- Toggle individual cell columns in or out of analysis, which applies across files.
+- Toggle individual cell columns in or out of analysis, which applies across files
 - Automatically background-subtract fluorescence values row by row across all active cell columns before data visualization and analysis
 
 ### Data Alignment and grouping
