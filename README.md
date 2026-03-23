@@ -13,7 +13,7 @@ ACID is a browser-based application for processing and analysing ratiometric cal
 - Automatically detect and skip metadata rows, with manual correction available per file
 - Detect and correct reversed time ordering where data runs in descending order
 - Configure which columns represent cells; the background reference column defaults to the final column and can be reassigned by the user
-- Toggle individual cell columns in or out of analysis, which applies analysis wide.
+- Toggle individual cell columns in or out of analysis, which applies across files.
 - Automatically background-subtract fluorescence values row by row across all active cell columns before data visualization and analysis
 
 ### Data Alignment and grouping
@@ -29,7 +29,7 @@ ACID is a browser-based application for processing and analysing ratiometric cal
 
 ### Statistics and Analysis
 - Compute min, max, and sample standard deviation per group within the averaging window
-- **Two-sample Welch's t-test** (two-tailed, α = 0.05) when exactly two eligible groups are visible, comparing minimums or maximums against a user-selected control; reports Cohen's *d* with interpretation
+- **Two-sample Welch's t-test** (two-tailed, alpha = 0.05) when exactly two eligible groups are visible, comparing minimums or maximums against a user-selected control; reports Cohen's *d* with interpretation
 - **Welch's one-way ANOVA** with Bonferroni post-hoc pairwise comparisons when three or more eligible groups are visible; reports ω² (omega-squared) as the omnibus effect size and Cohen's *d* for each selected comparison; Bonferroni correction uses only the comparisons selected by the user
 - Export summary statistics and statistical test results to CSV as separate files
 
