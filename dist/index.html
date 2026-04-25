@@ -368,6 +368,7 @@ var graphFmt='png';  // current graph save format: 'png' or 'svg'
 var _groupSnap=null;    // snapshot of grouping state for undo/redo toggle — alternates between
                         // the pre-action state (when button shows "Undo") and the post-undo state
                         // (when button shows "Redo"); a new user action always resets redo.
+var normGroupLabel=null; // label of the group selected as normalization reference (null = raw mode)
 
 // Color palettes — file lines use FCOLS (lighter), group average lines use GCOLS (darker)
 var FCOLS=['#378ADD','#1D9E75','#D85A30','#D4537E','#7F77DD','#BA7517','#E24B4A','#639922','#0891B2','#CA8A04'];
@@ -1423,10 +1424,38 @@ function renderStats(){
     return;
   }
 
+  var groupRows=res.filter(function(r){return r.type==='group'});
+  var ungroupedFileRows=res.filter(function(r){return r.type==='file'&&r.groupLabel===null});
+
+  // ── Normalization setup ──────────────────────────────────────────────────
+  // Only groups can be normalized. The reference group's avg max, avg min, and
+  // avg range serve as divisors for max-, min-, and range-related stats respectively.
+  // If the selected reference label is no longer present (group renamed/removed),
+  // fall back to raw mode silently.
+  if(normGroupLabel && !groupRows.find(function(r){return r.label===normGroupLabel})){
+    normGroupLabel=null;
+  }
+  var refGroup=normGroupLabel?groupRows.find(function(r){return r.label===normGroupLabel}):null;
+  // Min-max normalization: normalized = (value − ref_avg_min) / (ref_avg_max − ref_avg_min)
+  //   → reference avg_min  maps to 0
+  //   → reference avg_max  maps to 1
+  // Spread values (SDs, ranges) are divided by the span only — no offset subtraction,
+  // since they are already differences and shifting them makes no statistical sense.
+  // Guard against zero span (degenerate case where ref max === ref min).
+  var normOffset = refGroup ? refGroup.min : 0;
+  var normSpan   = refGroup ? (refGroup.max - refGroup.min) : null;
+  var doNorm     = !!(refGroup && normSpan !== null && normSpan !== 0);
+
+  // Helper: format a value with optional normalization.
+  //   isAbsolute=true  → subtract offset then divide by span  (min, max)
+  //   isAbsolute=false → divide by span only                   (range, SD values)
+  function nfmt(v, isAbsolute){
+    if(!doNorm) return v.toFixed(6);
+    return isAbsolute ? ((v - normOffset) / normSpan).toFixed(6)
+                      : (v / normSpan).toFixed(6);
+  }
+
   // ── Minimum-window-points warning ───────────────────────────────────────
-  // Collect the n-points-in-window for every row (file and group average lines).
-  // Warn if any series has fewer than 3 points; 1–2 points make min === max and
-  // give misleading statistics.
   var thinSeries=res.filter(function(r){return r.n<3});
   var h='';
   if(thinSeries.length){
@@ -1437,13 +1466,32 @@ function renderStats(){
       +'Min and max values may be unreliable — consider widening the window.</div>';
   }
 
-  h+='<p style="font-size:12px;color:var(--text2);margin-bottom:12px">'
+  h+='<p style="font-size:12px;color:var(--text2);margin-bottom:10px">'
     +'Window <strong>'+fmt(boundL)+' — '+fmt(boundR)+'</strong> s</p>';
 
-  var groupRows=res.filter(function(r){return r.type==='group'});
-  var ungroupedFileRows=res.filter(function(r){return r.type==='file'&&r.groupLabel===null});
+  // ── Normalize-to dropdown (groups only) ─────────────────────────────────
+  if(groupRows.length){
+    var selAttr=function(lbl){return normGroupLabel===lbl?' selected':''};
+    h+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;'
+      +'padding:8px 12px;background:var(--bg2);border-radius:var(--r);border:0.5px solid var(--border)">'
+      +'<span style="font-size:12px;font-weight:500;color:var(--text2);white-space:nowrap">Normalize to:</span>'
+      +'<select id="normSel" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--border2);'
+      +'border-radius:var(--r);background:var(--bg);color:var(--text)" '
+      +'onchange="normGroupLabel=this.value||null;renderStats()">'
+      +'<option value=""'+selAttr(null)+'>None (raw values)</option>';
+    groupRows.forEach(function(g){
+      h+='<option value="'+esc(g.label)+'"'+selAttr(g.label)+'>'+esc(g.label)+'</option>';
+    });
+    h+='</select>';
+    if(doNorm){
+      h+='<span style="font-size:11px;color:var(--text2)">'
+        +'Offset (avg min): <strong>'+refGroup.min.toFixed(4)+'</strong> &nbsp;'
+        +'Span (avg max − avg min): <strong>'+normSpan.toFixed(4)+'</strong></span>';
+    }
+    h+='</div>';
+  }
 
-  // Ungrouped visible files
+  // Ungrouped visible files — normalization never applied here
   if(ungroupedFileRows.length){
     h+='<p style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">Individual files</p>';
     h+='<div class="stat-wrap"><table class="st"><thead><tr>'
@@ -1461,39 +1509,48 @@ function renderStats(){
     h+='</tbody></table></div>';
   }
 
-  // Visible groups — summary row then constituent files with outlier flagging
+  // ── Visible groups — summary row then constituent files ──────────────────
   if(groupRows.length){
+    // Column header suffix when normalized
+    var normSfx=doNorm?' (norm.)':'';
     groupRows.forEach(function(g){
+      var isRef=doNorm&&g.label===normGroupLabel;
       h+='<p style="font-size:12px;font-weight:500;color:var(--text2);margin-top:1rem;margin-bottom:6px">'
         +'<span class="dot8" style="background:'+g.color+';display:inline-block;margin-right:6px;vertical-align:middle"></span>'
-        +'Group: '+esc(g.label)+'</p>';
-      // Group average row
+        +'Group: '+esc(g.label)
+        +(isRef?' <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;'
+          +'background:var(--info-bg);color:var(--info-text);margin-left:4px">reference</span>':'')
+        +'</p>';
+
+      // Group summary row
       h+='<div class="stat-wrap" style="margin-bottom:8px"><table class="st"><thead><tr>'
         +'<th>Group average</th><th>Files</th><th>Points in window</th>'
-        +'<th>Avg min</th><th>Sample SD (min)</th><th>Avg max</th><th>Sample SD (max)</th>'
-        +'<th>Avg range</th><th>Sample SD (range)</th>'
+        +'<th>Avg min'+normSfx+'</th><th>Sample SD (min'+normSfx+')</th>'
+        +'<th>Avg max'+normSfx+'</th><th>Sample SD (max'+normSfx+')</th>'
+        +'<th>Avg range'+normSfx+'</th><th>Sample SD (range'+normSfx+')</th>'
         +'</tr></thead><tbody>';
       h+='<tr>'
         +'<td style="font-weight:500"><span class="dot8" style="background:'+g.color+';display:inline-block;margin-right:7px;vertical-align:middle"></span>'+esc(g.label)+'</td>'
         +'<td class="mn">'+g.nMembers+'</td>'
         +'<td class="mn">'+g.n+'</td>'
-        +'<td class="mn">'+g.min.toFixed(6)+'</td>'
-        +'<td class="mn">'+g.sdMin.toFixed(6)+'</td>'
-        +'<td class="mn">'+g.max.toFixed(6)+'</td>'
-        +'<td class="mn">'+g.sdMax.toFixed(6)+'</td>'
-        +'<td class="mn">'+g.avgRange.toFixed(6)+'</td>'
-        +'<td class="mn">'+(g.nMembers>1?g.sdRange.toFixed(6):'—')+'</td>'
+        +'<td class="mn">'+nfmt(g.min,true)+'</td>'
+        +'<td class="mn">'+nfmt(g.sdMin,false)+'</td>'
+        +'<td class="mn">'+nfmt(g.max,true)+'</td>'
+        +'<td class="mn">'+nfmt(g.sdMax,false)+'</td>'
+        +'<td class="mn">'+nfmt(g.avgRange,false)+'</td>'
+        +'<td class="mn">'+(g.nMembers>1?nfmt(g.sdRange,false):'—')+'</td>'
         +'</tr></tbody></table></div>';
+
       // Constituent files — flag per-file mins and maxs that are >2 SD from group mean
       var members=res.filter(function(r){return r.type==='file'&&r.groupLabel===g.label});
       if(members.length){
-        // Compute outlier sets independently for min and max across all member values
         var memberMins=members.map(function(r){return r.min});
         var memberMaxs=members.map(function(r){return r.max});
-        var outlierMin=flagOutliers(memberMins); // Set of indices with |min − mean_min| > 2·SD
-        var outlierMax=flagOutliers(memberMaxs); // Set of indices with |max − mean_max| > 2·SD
+        var outlierMin=flagOutliers(memberMins);
+        var outlierMax=flagOutliers(memberMaxs);
         h+='<div class="stat-wrap"><table class="st"><thead><tr>'
-          +'<th>Constituent file</th><th>Points in window</th><th>Min</th><th>Max</th><th>Range</th>'
+          +'<th>Constituent file</th><th>Points in window</th>'
+          +'<th>Min'+normSfx+'</th><th>Max'+normSfx+'</th><th>Range'+normSfx+'</th>'
           +'</tr></thead><tbody>';
         members.forEach(function(r,idx){
           var minFlag=outlierMin.has(idx)?'<span class="outlier-badge" title="More than 2 SD from group mean min">⚠ &gt;2 SD</span>':'';
@@ -1501,9 +1558,9 @@ function renderStats(){
           h+='<tr>'
             +'<td style="color:var(--text2)"><span class="dot8" style="background:'+r.color+';display:inline-block;margin-right:7px;vertical-align:middle"></span>'+esc(r.label)+'</td>'
             +'<td class="mn">'+r.n+'</td>'
-            +'<td class="mn">'+r.min.toFixed(6)+minFlag+'</td>'
-            +'<td class="mn">'+r.max.toFixed(6)+maxFlag+'</td>'
-            +'<td class="mn">'+r.range.toFixed(6)+'</td>'
+            +'<td class="mn">'+nfmt(r.min,true)+minFlag+'</td>'
+            +'<td class="mn">'+nfmt(r.max,true)+maxFlag+'</td>'
+            +'<td class="mn">'+nfmt(r.range,false)+'</td>'
             +'</tr>';
         });
         h+='</tbody></table></div>';
@@ -1513,65 +1570,89 @@ function renderStats(){
 
   document.getElementById('statContent').innerHTML=h;
   window._statsRes=res;
+  window._normState={doNorm:doNorm,refGroup:refGroup,normOffset:normOffset,normSpan:normSpan};
   renderTestSection();
 }
 
-// Serialises the current stats results (and t-test results if present) to a CSV blob
-// and triggers a browser download as "acid_stats.csv".
+// Serialises the current stats results to a CSV blob and triggers a browser download.
+// When normalization is active the exported values are the normalized figures (identical
+// to what is displayed on screen); the CSV header records the reference group and the
+// offset/span used.
 //
-// Column meanings in the exported CSV:
-//   Individual files:  min, max, range      — window min/max/range of background-subtracted per-row cell mean
-//   Group summary:     avg_min             — group-average-series min within window
-//                      sample_sd_min       — sample SD (÷N−1) of per-file mins within window
-//                      avg_max             — group-average-series max within window
-//                      sample_sd_max       — sample SD (÷N−1) of per-file maxs within window
-//                      avg_range           — arithmetic mean of per-file ranges within window
-//                      sample_sd_range     — sample SD (÷N−1) of per-file ranges within window
-//   T-test rows:       mean_min/max        — arithmetic mean of per-file scalars for that group
-//                      sample_sd_min/max   — sample SD (÷N−1) as reported by welchT
-//                      t_statistic         — Welch's t = (x̄_ctrl − x̄_exp) / SE
-//                      degrees_of_freedom  — Welch-Satterthwaite df (non-integer in general)
-//                      p_value_two_tailed  — p = I_{df/(df+t²)}(df/2, 1/2)
+// Normalization formula (min-max normalization):
+//   Absolute values (min, max):              (value − ref_avg_min) / (ref_avg_max − ref_avg_min)
+//   Spread values (range, SDs):              value / (ref_avg_max − ref_avg_min)
+//   → reference avg_min maps to 0; reference avg_max maps to 1
 //
-// All SD values in this file use sample SD (÷N−1). Group files are biological replicates
-// (a sample from a larger population), so Bessel's correction is appropriate throughout.
+// Column suffixes: _norm appended to every numeric column name when normalization is ON.
+// Normalization is never applied to individual (ungrouped) files.
+// T-test and ANOVA results are saved separately via the "Save test CSV" button.
 function dlCSV(name){
   if(!window._statsRes)return;
   var res=window._statsRes;
+  var ns=window._normState||{};
+  var doNorm=ns.doNorm||false;
+  var normOffset=ns.normOffset||0, normSpan=ns.normSpan||1;
+  var refGroup=ns.refGroup;
+
+  // Min-max normalization: absolute values → (v − offset) / span; spreads → v / span
+  function nfmt(v,isAbsolute){
+    if(!doNorm) return v.toFixed(6);
+    return isAbsolute?((v-normOffset)/normSpan).toFixed(6):(v/normSpan).toFixed(6);
+  }
+
   var lines=[
     'ACID',
     "# Andrew's Calcium Imaging Decoder",
     '# Window: '+boundL+' s to '+boundR+' s',
-    '# Generated: '+new Date().toISOString(),
-    ''
+    '# Generated: '+new Date().toISOString()
   ];
+  if(doNorm){
+    lines.push('# Normalization: ON — reference group: "'+refGroup.label+'"');
+    lines.push('#   Formula: (value − offset) / span   for absolute values (min, max)');
+    lines.push('#            value / span              for spread values (range, SDs)');
+    lines.push('#   Offset = reference avg min: '+refGroup.min.toFixed(6));
+    lines.push('#   Span   = reference avg max − avg min: '+normSpan.toFixed(6));
+    lines.push('#   → reference avg min maps to 0; reference avg max maps to 1');
+  } else {
+    lines.push('# Normalization: OFF — raw values');
+  }
+  lines.push('');
 
   var ungroupedFiles=res.filter(function(r){return r.type==='file'&&r.groupLabel===null});
   var groupRows=res.filter(function(r){return r.type==='group'});
 
   if(ungroupedFiles.length){
-    lines.push('=== Individual Files ===');
+    lines.push('=== Individual Files (normalization not applied) ===');
     lines.push('file,points_in_window,min,max,range');
     ungroupedFiles.forEach(function(r){
       lines.push(['"'+r.label+'"',r.n,r.min.toFixed(6),r.max.toFixed(6),r.range.toFixed(6)].join(','));
     });
   }
 
+  var normSfx=doNorm?'_norm':'';
   groupRows.forEach(function(g){
     lines.push('');
-    lines.push('=== Group: '+g.label+' ===');
-    lines.push('group,member_files,points_in_window,avg_min,sample_sd_min,avg_max,sample_sd_max,avg_range,sample_sd_range');
-    lines.push(['"'+g.label+'"',g.nMembers,g.n,g.min.toFixed(6),g.sdMin.toFixed(6),g.max.toFixed(6),g.sdMax.toFixed(6),g.avgRange.toFixed(6),(g.nMembers>1?g.sdRange.toFixed(6):'')].join(','));
+    lines.push('=== Group: '+g.label+(doNorm?' (normalized to: '+refGroup.label+')===' : ' ==='));
+    lines.push('group,member_files,points_in_window,'
+      +'avg_min'+normSfx+',sample_sd_min'+normSfx+','
+      +'avg_max'+normSfx+',sample_sd_max'+normSfx+','
+      +'avg_range'+normSfx+',sample_sd_range'+normSfx);
+    lines.push(['"'+g.label+'"',g.nMembers,g.n,
+      nfmt(g.min,true),nfmt(g.sdMin,false),
+      nfmt(g.max,true),nfmt(g.sdMax,false),
+      nfmt(g.avgRange,false),
+      (g.nMembers>1?nfmt(g.sdRange,false):'')
+    ].join(','));
     lines.push('');
-    lines.push('constituent_file,points_in_window,min,max,range');
+    lines.push('constituent_file,points_in_window,min'+normSfx+',max'+normSfx+',range'+normSfx);
     var members=res.filter(function(r){return r.type==='file'&&r.groupLabel===g.label});
     members.forEach(function(r){
-      lines.push(['"'+r.label+'"',r.n,r.min.toFixed(6),r.max.toFixed(6),r.range.toFixed(6)].join(','));
+      lines.push(['"'+r.label+'"',r.n,
+        nfmt(r.min,true),nfmt(r.max,true),nfmt(r.range,false)
+      ].join(','));
     });
   });
-
-  // T-test and ANOVA results are saved separately via the "Save test CSV" button
-  // inside each test panel — they are intentionally excluded from this file.
 
   var b=new Blob([lines.join('\n')],{type:'text/csv'});
   var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(name||'acid_stats')+'.csv';a.click();
